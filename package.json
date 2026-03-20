@@ -1,6 +1,6 @@
 {
-  "name": "filely",
-  "displayName": "filely",
+  "name": "filefly",
+  "displayName": "filefly",
   "description": "Real time file editing",
   "version": "0.0.1",
   "engines": {
@@ -14,7 +14,7 @@
   "contributes": {
     "commands": [
       {
-        "command": "filely.helloWorld",
+        "command": "filefly.helloWorld",
         "title": "Hello World"
       }
     ]

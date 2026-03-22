@@ -17,6 +17,73 @@
         "command": "filefly.helloWorld",
         "title": "Hello World"
       }
+      {
+        "command": "filefly.helloWorld",
+        "title": "Hello World"
+      },
+      {
+        "command": "filefly.newConnection",
+        "title": "New Multiplauer Connection",
+        "category": "FileFly",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "filefly.refreshConnections",
+        "title": "Refresh Connection",
+        "category": "FileFly",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "filefly.connectConnection",
+        "title": "Connect",
+        "category": "FileFly",
+        "icon": "$(play)"
+      },
+      {
+        "command": "filefly.disconnectConnection",
+        "title": "Disconnect",
+        "category": "FileFly",
+        "icon": "$(stop-circle)"
+      },
+      {
+        "command": "filefly.editConnection",
+        "title": "Edit Connection",
+        "category": "FileFly",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "filefly.deleteConnection",
+        "title": "Delete Connection",
+        "category": "FileFly",
+        "icon": "$(trash)"
+      }
+    ],
+    "configuration": {
+      "title": "FileFly",
+      "properties": {
+        "filefly.connections": {
+          "type": "array",
+          "default": [],
+          "description": "Saved PostgreSQL connections.",
+          "items": {
+            "type": "object",
+            "required": ["connectionName", "hostname", "port", "database", "username"],
+            "properties": {
+              "connectionName": { "type": "string" },
+              "authType":       { "type": "string" },
+              "username":       { "type": "string" },
+              "password":       { "type": "string" },
+              "hostname":       { "type": "string" },
+              "port":           { "type": "number" },
+              "connectionMode": { "type": "string" },
+              "database":       { "type": "string" },
+              "serviceName":    { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
     ]
   },
   "scripts": {

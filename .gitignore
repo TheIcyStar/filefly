@@ -1,5 +1,5 @@
 .vscode/*
-!.vscode/settings.json
+!.vscode/settings.example.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
@@ -23,3 +23,5 @@ tsconfig.lsif.json
 
 # Don't check in API files. These should be pulled in during install
 vscode*.d.ts
+
+.env

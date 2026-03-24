@@ -1,7 +1,4 @@
 
-
-
-
 CREATE TABLE IF NOT EXISTS file (
     path        TEXT PRIMARY KEY,
     content     TEXT 
@@ -13,6 +10,8 @@ CREATE TABLE IF NOT EXISTS openFile (
    CONSTRAINT openFilefilepathtofilepath FOREIGN KEY (filePath) REFERENCES file(path)
 );
 
+
+
 CREATE TABLE IF NOT EXISTS activeUser (
     userId              INT PRIMARY KEY,
     colPos              INT,
@@ -22,9 +21,10 @@ CREATE TABLE IF NOT EXISTS activeUser (
     highlightStartCol   INT,
     highlightStopRow    INT,
     highlightStopCol    INT,
-    CONSTRAINT activeUseruserIdtoopenFiluserId FOREIGN KEY (userId) REFERENCES openFile(userId)
-    -- START HERE, ADD OTHER CONSTAINTS
+    CONSTRAINT activeUseruserIdtoopenFileuserId FOREIGN KEY (userId) REFERENCES openFile(userId)
+    -- START HERE, ADD OTHER CONSTAINTS AS NEEDED
 );
+
 
 CREATE TABLE IF NOT EXISTS chunk (
     filePath     TEXT,

@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS file (
 
 CREATE TABLE IF NOT EXISTS openFile (
    filePath     TEXT PRIMARY KEY,
-   userId       INT UNIQUE,
+   userId       INT,
    CONSTRAINT openFilefilepathtofilepath FOREIGN KEY (filePath) REFERENCES file(path)
 );
 

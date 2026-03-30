@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'none';
+                   style-src 'nonce-{{NONCE}}';
+                   script-src 'nonce-{{NONCE}}';" />
+    <title>{{TITLE}}</title>
+    <style nonce="{{NONCE}}">
+{{STYLE}}
+    </style>
+</head>
+<body>
+
+    <h1>{{TITLE}}</h1>
+
+    <div class="validation-summary" id="validationSummary">
+        Please fix the following before saving:
+        <ul id="validationList"></ul>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Connection Name</div>
+        <div class="grid">
+            <div class="field field-full">
+                <label>Name <span class="req">*</span></label>
+                <input type="text" id="connectionName" placeholder="e.g. Production DB" autocomplete="off" spellcheck="false" />
+                <span class="field-error" id="err-connectionName">Connection name is required.</span>
+            </div>
+        </div>
+    </div>
+
+    <hr />
+
+    <div class="section">
+        <div class="section-title">Server</div>
+        <div class="grid">
+            <div class="field">
+                <label>Hostname <span class="req">*</span></label>
+                <input type="text" id="hostname" placeholder="localhost" autocomplete="off" spellcheck="false" />
+                <span class="field-error" id="err-hostname">Hostname is required.</span>
+            </div>
+            <div class="field">
+                <label>Port <span class="req">*</span></label>
+                <input type="number" id="port" min="1" max="65535" value="5432" />
+                <span class="field-error" id="err-port">Port must be 1-65535.</span>
+            </div>
+            <div class="field">
+                <label>Database <span class="req">*</span></label>
+                <input type="text" id="database" placeholder="postgres" autocomplete="off" spellcheck="false" />
+                <span class="field-error" id="err-database">Database is required.</span>
+            </div>
+            <div class="field">
+                <label>Service name</label>
+                <input type="text" id="serviceName" placeholder="optional" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="field field-full">
+                <label>Connection type</label>
+                <select id="connectionMode">
+                    <option value="tcp">TCP/IP</option>
+                    <option value="socket">Unix Domain Socket</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <hr />
+
+    <div class="section">
+        <div class="section-title">Authentication</div>
+        <div class="grid">
+            <div class="field field-full">
+                <label>Authentication type</label>
+                <select id="authType">
+                    <option value="password">Password</option>
+                    <option value="scram-sha-256">SCRAM-SHA-256</option>
+                    <option value="trust">Trust (no password)</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Username <span class="req">*</span></label>
+                <input type="text" id="username" placeholder="postgres" autocomplete="username" spellcheck="false" />
+                <span class="field-error" id="err-username">Username is required.</span>
+            </div>
+            <div class="field" id="field-password">
+                <label>Password</label>
+                <div class="password-wrap">
+                    <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" />
+                    <button type="button" id="pwToggle" class="password-toggle" aria-label="Show/hide password">
+                        <svg id="eyeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <hr />
+
+    <div class="test-banner" id="testBanner">
+        <span id="testMessage"></span>
+    </div>
+
+    <div class="actions">
+        <button id="btnCancel" class="btn-ghost">Cancel</button>
+        <button class="btn-secondary" id="btnTest">Test Connection</button>
+        <button class="btn-primary" id="btnSave">Save</button>
+    </div>
+
+<script nonce="{{NONCE}}">
+{{SCRIPT}}
+</script>
+</body>
+</html>

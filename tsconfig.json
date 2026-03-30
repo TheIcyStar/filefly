@@ -1,0 +1,20 @@
+{
+	"compilerOptions": {
+		"module": "Node16",
+		"target": "ES2022",
+		"lib": [
+			"ES2022"
+		],
+		"types": [
+			"vscode",
+			"node"
+		],
+		"outDir": "dist",
+		"sourceMap": true,
+		"rootDir": ".",
+		"strict": true, 
+		"noImplicitReturns": true,
+		"noFallthroughCasesInSwitch": true,
+		"noUnusedParameters": true
+	}
+}

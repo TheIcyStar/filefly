@@ -1,0 +1,107 @@
+{
+  "name": "filefly",
+  "displayName": "filefly",
+  "description": "Real time file editing",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.110.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "filefly.helloWorld",
+        "title": "Hello World"
+      },
+      {
+        "command": "filefly.helloWorld",
+        "title": "Hello World"
+      },
+      {
+        "command": "filefly.newConnection",
+        "title": "New Multiplayer Connection",
+        "category": "FileFly",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "filefly.refreshConnections",
+        "title": "Refresh Connection",
+        "category": "FileFly",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "filefly.connectConnection",
+        "title": "Connect",
+        "category": "FileFly",
+        "icon": "$(play)"
+      },
+      {
+        "command": "filefly.disconnectConnection",
+        "title": "Disconnect",
+        "category": "FileFly",
+        "icon": "$(stop-circle)"
+      },
+      {
+        "command": "filefly.editConnection",
+        "title": "Edit Connection",
+        "category": "FileFly",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "filefly.deleteConnection",
+        "title": "Delete Connection",
+        "category": "FileFly",
+        "icon": "$(trash)"
+      }
+    ],
+    "configuration": {
+      "title": "FileFly",
+      "properties": {
+        "filefly.connections": {
+          "type": "array",
+          "default": [],
+          "description": "Saved PostgreSQL connections.",
+          "items": {
+            "type": "object",
+            "required": ["connectionName", "hostname", "port", "database", "username"],
+            "properties": {
+              "connectionName": { "type": "string" },
+              "authType":       { "type": "string" },
+              "username":       { "type": "string" },
+              "password":       { "type": "string" },
+              "hostname":       { "type": "string" },
+              "port":           { "type": "number" },
+              "connectionMode": { "type": "string" },
+              "database":       { "type": "string" },
+              "serviceName":    { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/vscode": "^1.110.0",
+    "esbuild": "^0.27.3",
+    "eslint": "^9.39.3",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1"
+  }
+}

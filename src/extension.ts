@@ -1,6 +1,8 @@
 import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
+import { getDatabaseConnection } from './connectionManagement'
+import postgres from 'postgres'
 
 //types 
 //note: largely doesn't work right now and is mostly just
@@ -189,6 +191,8 @@ class ConnectionTreeProvider implements vscode.TreeDataProvider<ConnectionItem> 
     private readonly _onDidChangeTreeData = new vscode.EventEmitter<ConnectionItem | undefined | void>()
     readonly onDidChangeTreeData = this._onDidChangeTreeData.event
 
+    private readonly connectionMap = new Map<string, postgres.Sql>()
+
     // tracks live status for each saved connection by name
     private readonly statusMap = new Map<string, ConnectionStatus>()
 
@@ -202,6 +206,11 @@ class ConnectionTreeProvider implements vscode.TreeDataProvider<ConnectionItem> 
     }
 
     refresh(): void { this._onDidChangeTreeData.fire() }
+
+    setConnection(connectionName: string, connection: postgres.Sql): void {
+        this.connectionMap.set(connectionName, connection)
+        this._onDidChangeTreeData.fire()
+    }
 
     setStatus(connectionName: string, status: ConnectionStatus): void {
         this.statusMap.set(connectionName, status)
@@ -340,9 +349,16 @@ export function activate(context: vscode.ExtensionContext): void {
 
         vscode.commands.registerCommand(
             'filefly.connectConnection',
-            (item: ConnectionItem) => {
-                treeProvider.setStatus(item.config.connectionName, 'connected')
-                vscode.window.showInformationMessage(`Connected to "${item.config.connectionName}"`)
+            () => {
+				const item = treeProvider.getChildren()[0]
+				const connection = getDatabaseConnection(item.config)
+				if (connection === undefined) {
+					vscode.window.showErrorMessage(`Failed to connect to "${item.config.connectionName}"`)
+				} else {
+					treeProvider.setConnection(item.config.connectionName, connection)
+	                treeProvider.setStatus(item.config.connectionName, 'connected')
+                	vscode.window.showInformationMessage(`Connected to "${item.config.connectionName}"`)
+				}
             }
         ),
 

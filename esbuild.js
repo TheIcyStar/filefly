@@ -1,8 +1,5 @@
 const esbuild = require("esbuild");
-<<<<<<< HEAD
 const fs = require("fs");
-=======
->>>>>>> c12412281b998a02ff7bff4a9e8fe1183e1e59d1
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
@@ -22,11 +19,8 @@ const esbuildProblemMatcherPlugin = {
 				console.error(`✘ [ERROR] ${text}`);
 				console.error(`    ${location.file}:${location.line}:${location.column}:`);
 			});
-<<<<<<< HEAD
 			// copy static view files (html/css/js) to dist so the extension can read them at runtime
 			fs.cpSync('src/views', 'dist/views', { recursive: true });
-=======
->>>>>>> c12412281b998a02ff7bff4a9e8fe1183e1e59d1
 			console.log('[watch] build finished');
 		});
 	},
@@ -62,8 +56,4 @@ async function main() {
 main().catch(e => {
 	console.error(e);
 	process.exit(1);
-<<<<<<< HEAD
 });
-=======
-});
->>>>>>> c12412281b998a02ff7bff4a9e8fe1183e1e59d1

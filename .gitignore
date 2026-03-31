@@ -14,10 +14,6 @@ npm-debug.log
 Thumbs.db
 **/node_modules/
 */out/
-<<<<<<< HEAD
-=======
-**/dist/
->>>>>>> c12412281b998a02ff7bff4a9e8fe1183e1e59d1
 */.vs/
 tsconfig.lsif.json
 *.lsif

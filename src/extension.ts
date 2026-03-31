@@ -5,7 +5,7 @@ import * as path from 'path'
 //types 
 //note: largely doesn't work right now and is mostly just
 // UI - saving that workload for others.
-interface ConnectionConfig {
+export interface ConnectionConfig {
     connectionName: string
     authType: string
     username: string

@@ -16,22 +16,14 @@
       {
         "command": "filefly.helloWorld",
         "title": "Hello World"
-<<<<<<< HEAD
       },
-=======
-      }
->>>>>>> c12412281b998a02ff7bff4a9e8fe1183e1e59d1
       {
         "command": "filefly.helloWorld",
         "title": "Hello World"
       },
       {
         "command": "filefly.newConnection",
-<<<<<<< HEAD
         "title": "New Multiplayer Connection",
-=======
-        "title": "New Multiplauer Connection",
->>>>>>> c12412281b998a02ff7bff4a9e8fe1183e1e59d1
         "category": "FileFly",
         "icon": "$(plug)"
       },
@@ -92,11 +84,6 @@
       }
     }
   },
-<<<<<<< HEAD
-=======
-    ]
-  },
->>>>>>> c12412281b998a02ff7bff4a9e8fe1183e1e59d1
   "scripts": {
     "vscode:prepublish": "npm run package",
     "compile": "npm run check-types && npm run lint && node esbuild.js",

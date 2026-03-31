@@ -1,7 +1,13 @@
 
 CREATE TABLE IF NOT EXISTS file (
-    path        TEXT PRIMARY KEY NOT NULL,
+    path        TEXT PRIMARY KEY NOT NULL, -- Unix style path
+    mtime       INT NOT NULL,
     content     TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS directory (
+    path        TEXT PRIMARY KEY NOT NULL,  -- Unix style path, workspace folder is "."
+    mtime       INT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS openFile (

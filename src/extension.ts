@@ -1,7 +1,7 @@
 import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
-import { getDatabaseConnection } from './connectionManagement'
+import { getDatabaseConnection } from './db/connectionManagement'
 import postgres from 'postgres'
 
 //types 

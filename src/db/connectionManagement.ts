@@ -1,5 +1,5 @@
 import postgres from 'postgres'
-import { ConnectionConfig } from './extension'
+import { ConnectionConfig } from '../extension'
 
 export async function getDatabaseConnection(connConfig: ConnectionConfig): Promise<postgres.Sql | undefined> {
     if (connConfig === undefined) {

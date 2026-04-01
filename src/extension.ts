@@ -349,16 +349,21 @@ export function activate(context: vscode.ExtensionContext): void {
 
         vscode.commands.registerCommand(
             'filefly.connectConnection',
-            () => {
+            async () => {
 				const item = treeProvider.getChildren()[0]
-				const connection = getDatabaseConnection(item.config)
-				if (connection === undefined) {
-					vscode.window.showErrorMessage(`Failed to connect to "${item.config.connectionName}"`)
-				} else {
-					treeProvider.setConnection(item.config.connectionName, connection)
-	                treeProvider.setStatus(item.config.connectionName, 'connected')
-                	vscode.window.showInformationMessage(`Connected to "${item.config.connectionName}"`)
-				}
+                try {
+                    const connection = await getDatabaseConnection(item.config)
+                    if (connection === undefined) {
+                        vscode.window.showErrorMessage(`Failed to connect to "${item.config.connectionName}"`)
+                    } else {
+                        treeProvider.setConnection(item.config.connectionName, connection)
+                        treeProvider.setStatus(item.config.connectionName, 'connected')
+                        vscode.window.showInformationMessage(`Connected to "${item.config.connectionName}"`)
+                    }
+                } catch (err) {
+                    console.log(err)
+                    vscode.window.showErrorMessage(`Failed to connect to "${item.config.connectionName}"`)
+                }
             }
         ),
 

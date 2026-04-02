@@ -41,7 +41,7 @@ export async function makeChunks(): Promise<chunk[] | undefined> {
     const chunkSize = 500;
     const numOfChunks = Math.ceil(content.length / chunkSize);
     let currentpos = 0;
-    let chunks: chunk[] = [];
+    const chunks: chunk[] = [];
 
     for (let i = 0; i < numOfChunks; i++) {
         const chunkContent = content.slice(currentpos, currentpos + chunkSize);

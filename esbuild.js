@@ -1,4 +1,5 @@
 const esbuild = require("esbuild");
+const fs = require("fs");
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
@@ -18,6 +19,8 @@ const esbuildProblemMatcherPlugin = {
 				console.error(`✘ [ERROR] ${text}`);
 				console.error(`    ${location.file}:${location.line}:${location.column}:`);
 			});
+			// copy static view files (html/css/js) to dist so the extension can read them at runtime
+			fs.cpSync('src/views', 'dist/views', { recursive: true });
 			console.log('[watch] build finished');
 		});
 	},

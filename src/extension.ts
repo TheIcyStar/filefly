@@ -3,6 +3,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { getDatabaseConnection } from './db/connectionManagement'
 import postgres from 'postgres'
+import { fileCreateListener } from './listeners/fileCreateListener'
 
 //types 
 //note: largely doesn't work right now and is mostly just
@@ -402,7 +403,9 @@ export function activate(context: vscode.ExtensionContext): void {
                 // an explicit refresh guarantees the status map is also cleared for this entry
                 treeProvider.setStatus(item.config.connectionName, 'disconnected')
             }
-        )
+        ),
+
+        vscode.workspace.onDidCreateFiles(fileCreateListener)
 
     )
 }

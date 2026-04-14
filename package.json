@@ -1,7 +1,7 @@
 {
   "name": "filefly",
   "displayName": "filefly",
-  "description": "Real time file editing",
+  "description": "Filefly is a VSCode extension for concurrent coding",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.110.0"
@@ -9,27 +9,51 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onCommand:filefly.newConnection",
+    "onCommand:filefly.editUserConfig",
+    "onCommand:filefly.refreshConnections",
+    "onCommand:filefly.connectConnection",
+    "onCommand:filefly.disconnectConnection",
+    "onCommand:filefly.editConnection",
+    "onCommand:filefly.deleteConnection",
+    "onView:fileflyConnections"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "filefly",
+          "title": "FileFly"
+        }
+      ]
+    },
+    "views": {
+      "filefly": [
+        {
+          "id": "fileflyConnections",
+          "name": "Connections",
+          "contextualTitle": "FileFly Connections"
+        }
+      ]
+    },
     "commands": [
       {
-        "command": "filefly.helloWorld",
-        "title": "Hello World"
-      },
-      {
-        "command": "filefly.helloWorld",
-        "title": "Hello World"
-      },
-      {
         "command": "filefly.newConnection",
-        "title": "New Multiplayer Connection",
+        "title": "New Collaborative Connection",
         "category": "FileFly",
         "icon": "$(plug)"
       },
       {
+        "command": "filefly.editUserConfig",
+        "title": "Edit Your Profile",
+        "category": "FileFly",
+        "icon": "$(account)"
+      },
+      {
         "command": "filefly.refreshConnections",
-        "title": "Refresh Connection",
+        "title": "Refresh Connections",
         "category": "FileFly",
         "icon": "$(refresh)"
       },
@@ -58,9 +82,54 @@
         "icon": "$(trash)"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "filefly.newConnection",
+          "when": "view == fileflyConnections",
+          "group": "navigation@1"
+        },
+        {
+          "command": "filefly.refreshConnections",
+          "when": "view == fileflyConnections",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "filefly.connectConnection",
+          "when": "view == fileflyConnections && viewItem == fileflyConnection",
+          "group": "1_connection@1"
+        },
+        {
+          "command": "filefly.disconnectConnection",
+          "when": "view == fileflyConnections && viewItem == fileflyConnectionActive",
+          "group": "1_connection@1"
+        },
+        {
+          "command": "filefly.editConnection",
+          "when": "view == fileflyConnections && (viewItem == fileflyConnection || viewItem == fileflyConnectionActive)",
+          "group": "2_manage@1"
+        },
+        {
+          "command": "filefly.deleteConnection",
+          "when": "view == fileflyConnections && (viewItem == fileflyConnection || viewItem == fileflyConnectionActive)",
+          "group": "2_manage@2"
+        }
+      ]
+    },
     "configuration": {
       "title": "FileFly",
       "properties": {
+        "filefly.userConfig": {
+          "type": "object",
+          "description": "Your collaborator profile.",
+          "properties": {
+            "displayName": { "type": "string" },
+            "bio":         { "type": "string" },
+            "color":       { "type": "string" }
+          }
+        },
         "filefly.connections": {
           "type": "array",
           "default": [],

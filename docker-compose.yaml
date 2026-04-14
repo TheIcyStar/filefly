@@ -1,0 +1,16 @@
+services:
+  db:
+    container_name: filefly_db
+    image: postgres:18.3-alpine
+    environment:
+      POSTGRES_PASSWORD: ${FILEFLY_DB_PASSWORD}
+      POSTGRES_USER: ${FILEFLY_DB_USERNAME}
+      POSTGRES_DB: ${FILEFLY_DB_DATABASE_NAME}
+    ports:
+      - 5432:5432
+    volumes:
+      - filefly_db_data:/var/lib/postgresql
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  filefly_db_data:

@@ -67,17 +67,41 @@
           "description": "Saved PostgreSQL connections.",
           "items": {
             "type": "object",
-            "required": ["connectionName", "hostname", "port", "database", "username"],
+            "required": [
+              "connectionName",
+              "hostname",
+              "port",
+              "database",
+              "username"
+            ],
             "properties": {
-              "connectionName": { "type": "string" },
-              "authType":       { "type": "string" },
-              "username":       { "type": "string" },
-              "password":       { "type": "string" },
-              "hostname":       { "type": "string" },
-              "port":           { "type": "number" },
-              "connectionMode": { "type": "string" },
-              "database":       { "type": "string" },
-              "serviceName":    { "type": "string" }
+              "connectionName": {
+                "type": "string"
+              },
+              "authType": {
+                "type": "string"
+              },
+              "username": {
+                "type": "string"
+              },
+              "password": {
+                "type": "string"
+              },
+              "hostname": {
+                "type": "string"
+              },
+              "port": {
+                "type": "number"
+              },
+              "connectionMode": {
+                "type": "string"
+              },
+              "database": {
+                "type": "string"
+              },
+              "serviceName": {
+                "type": "string"
+              }
             }
           }
         }
@@ -98,10 +122,8 @@
     "@types/node": "22.x",
     "@types/vscode": "^1.110.0",
     "esbuild": "^0.27.3",
-    "eslint": "^9.39.3",
     "npm-run-all": "^4.1.5",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.56.1"
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "postgres": "^3.4.8"

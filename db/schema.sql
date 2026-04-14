@@ -42,3 +42,5 @@ CREATE TABLE IF NOT EXISTS chunk (
     PRIMARY KEY (filePath, num),
     FOREIGN KEY (filePath) REFERENCES file(path) ON DELETE CASCADE
 )
+
+INSERT INTO directory VALUES ('.', 0); --Root directory that will always get pushed to

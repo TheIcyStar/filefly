@@ -1,91 +1,60 @@
-const vscode = acquireVsCodeApi()
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'none';
+                   style-src 'nonce-{{NONCE}}';
+                   script-src 'nonce-{{NONCE}}';" />
+    <title>{{TITLE}}</title>
+    <style nonce="{{NONCE}}">
+{{STYLE}}
+    </style>
+</head>
+<body>
 
-const PRESET_COLORS = [
-    '#fc0b0b', // red
-    '#ff8c00', // orange
-    '#fcd80d', // yellow
-    '#12f8ca', // teal
-    '#73c5eb', // light blue
-    '#048dfd', // blue
-    '#015481', // dark blue
-    '#52034b', // purple
-    '#ce430c', // dark orange
-    '#51fa03', // green
-]
+    <h1>{{TITLE}}</h1>
+    <p class="subtitle">This is how other collaborators will see you.</p>
 
-const swatchContainer = document.getElementById('colorSwatches')
-const selectedColorInput = document.getElementById('selectedColor')
-const customColorInput = document.getElementById('customColor')
+    <div class="validation-summary" id="validationSummary">
+        Please fix the following before saving:
+        <ul id="validationList"></ul>
+    </div>
 
-function setSelectedColor(color) {
-    selectedColorInput.value = color
-    customColorInput.value = color
-    document.querySelectorAll('.swatch').forEach(function(s) {
-        s.classList.toggle('selected', s.dataset.color === color)
-    })
-}
+    <div class="section">
+        <div class="section-title">Identity</div>
+        <div class="grid">
+            <div class="field field-full">
+                <label>Display name <span class="req">*</span></label>
+                <input type="text" id="displayName" placeholder="e.g. Alex" autocomplete="off" spellcheck="false" maxlength="32" />
+                <span class="field-error" id="err-displayName">Display name is required.</span>
+            </div>
+        </div>
+    </div>
 
-PRESET_COLORS.forEach(function(color) {
-    const swatch = document.createElement('div')
-    swatch.className = 'swatch'
-    swatch.dataset.color = color
-    swatch.style.backgroundColor = color
-    swatch.title = color
-    swatch.addEventListener('click', function() { setSelectedColor(color) })
-    swatchContainer.appendChild(swatch)
-})
+    <hr />
 
-customColorInput.addEventListener('input', function() {
-    selectedColorInput.value = this.value
-    document.querySelectorAll('.swatch').forEach(function(s) {
-        s.classList.remove('selected')
-    })
-})
+    <div class="section">
+        <div class="section-title">Cursor color</div>
+        <p class="hint">Used to highlight your cursor and selections for other collaborators.</p>
+        <div class="color-grid" id="colorSwatches"></div>
+        <div class="custom-color-row">
+            <label for="customColor">Custom</label>
+            <input type="color" id="customColor" value="#4fc3f7" />
+        </div>
+        <input type="hidden" id="selectedColor" value="#4fc3f7" />
+    </div>
 
-setSelectedColor(selectedColorInput.value)
+    <hr />
 
-function showError(id, visible) {
-    document.getElementById(id).classList.toggle('visible', visible)
-}
+    <div class="actions">
+        <button id="btnCancel" class="btn-ghost">Cancel</button>
+        <button id="btnNext" class="btn-primary">Next: Connection ›</button>
+    </div>
 
-function validateAll() {
-    let valid = true
-
-    const displayName = document.getElementById('displayName').value.trim()
-    if (!displayName) {
-        document.getElementById('displayName').classList.add('error')
-        showError('err-displayName', true)
-        document.getElementById('validationSummary').classList.add('visible')
-        document.getElementById('validationList').innerHTML = '<li>Display name is required.</li>'
-        valid = false
-    } else {
-        document.getElementById('displayName').classList.remove('error')
-        showError('err-displayName', false)
-        document.getElementById('validationSummary').classList.remove('visible')
-    }
-
-    return valid
-}
-
-function collectPayload() {
-    return {
-        displayName: document.getElementById('displayName').value.trim(),
-        bio:         document.getElementById('bio').value.trim(),
-        color:       document.getElementById('selectedColor').value,
-    }
-}
-
-document.getElementById('btnNext').addEventListener('click', function() {
-    if (!validateAll()) return
-    vscode.postMessage({ command: 'submit', payload: collectPayload() })
-})
-
-document.getElementById('btnCancel').addEventListener('click', function() {
-    vscode.postMessage({ command: 'cancel' })
-})
-
-function populateConfig(cfg) {
-    document.getElementById('displayName').value = cfg.displayName || ''
-    document.getElementById('bio').value = cfg.bio || ''
-    if (cfg.color) { setSelectedColor(cfg.color) }
-}
+<script nonce="{{NONCE}}">
+{{SCRIPT}}
+</script>
+</body>
+</html>

@@ -8,9 +8,7 @@
                    style-src 'nonce-{{NONCE}}';
                    script-src 'nonce-{{NONCE}}';" />
     <title>{{TITLE}}</title>
-    <style nonce="{{NONCE}}">
-{{STYLE}}
-    </style>
+    <style nonce="{{NONCE}}">{{STYLE}}</style>
 </head>
 <body>
 
@@ -29,10 +27,6 @@
                 <label>Display name <span class="req">*</span></label>
                 <input type="text" id="displayName" placeholder="e.g. Alex" autocomplete="off" spellcheck="false" maxlength="32" />
                 <span class="field-error" id="err-displayName">Display name is required.</span>
-            </div>
-            <div class="field field-full">
-                <label>Bio <span class="optional">(optional)</span></label>
-                <input type="text" id="bio" placeholder="e.g. Backend dev, team Hydra" autocomplete="off" spellcheck="false" maxlength="80" />
             </div>
         </div>
     </div>

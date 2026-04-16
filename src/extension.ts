@@ -350,8 +350,38 @@ export function activate(context: vscode.ExtensionContext): void {
 
         vscode.commands.registerCommand(
             'filefly.connectConnection',
-            async () => {
-				const item = treeProvider.getChildren()[0]
+            async (connitem?: ConnectionItem) => {
+                let item = connitem
+
+                if (!item) {
+                    //assigns empty array if no connection settings found
+                    const configs: ConnectionConfig[] =
+                        vscode.workspace.getConfiguration('filefly').get('connections') ?? []
+
+                    if (configs.length === 0) {
+                        vscode.window.showErrorMessage('No saved FileFly connections available.')
+                        return
+                    }
+
+                    //Dropdown to pick connection
+                    const picked = await vscode.window.showQuickPick(
+                        configs.map(cfg => ({
+                            label: cfg.connectionName,
+                            description: `${cfg.hostname}:${cfg.port}/${cfg.database}`,
+                            config: cfg,
+                        })),
+                        { placeHolder: 'Select a FileFly connection to connect' }
+                    )
+
+                    if (!picked) {
+                        return
+                    }
+
+                    //creates new connection, and sets initial state to disconnected
+                    item = new ConnectionItem(picked.config, 'disconnected')
+                }
+			
+
                 try {
                     const connection = await getDatabaseConnection(item.config)
                     if (connection === undefined) {

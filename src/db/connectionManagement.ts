@@ -23,3 +23,12 @@ export async function getDatabaseConnection(connConfig: ConnectionConfig): Promi
 export function getConnection(): postgres.Sql | undefined {
     return conn;
 }
+
+export async function disconnectDatabaseConnection(): Promise<void> {
+    if (!conn) {
+        return;
+    }
+
+    await conn.end();
+    conn = undefined;
+}

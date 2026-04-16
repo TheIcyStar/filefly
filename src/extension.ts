@@ -1,7 +1,7 @@
 import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
-import { getDatabaseConnection } from './db/connectionManagement'
+import { disconnectDatabaseConnection, getDatabaseConnection } from './db/connectionManagement'
 import postgres from 'postgres'
 import { fileCreateListener } from './listeners/fileCreateListener'
 
@@ -118,7 +118,7 @@ class ConnectionDashboardPanel {
 
         if (existing.some(c => c.connectionName === config.connectionName)) {
             vscode.window.showErrorMessage(
-                `A connection named "${config.connectionName}" already exists.`
+                `FileFly: A connection named "${config.connectionName}" already exists.`
             )
             this._panel.webview.postMessage({ command: 'saveFailed', reason: 'duplicate' })
             return
@@ -129,7 +129,7 @@ class ConnectionDashboardPanel {
             .update('connections', existing, vscode.ConfigurationTarget.Global)
             .then(() => {
                 vscode.window.showInformationMessage(
-                    `Connection "${config.connectionName}" saved successfully.`
+                    `FileFly: Connection "${config.connectionName}" saved successfully.`
                 )
                 this._panel.webview.postMessage({ command: 'saveSuccess' })
                 this.dispose()
@@ -138,7 +138,7 @@ class ConnectionDashboardPanel {
 
     private _testConnection(config: ConnectionConfig): void {
         vscode.window.showInformationMessage(
-            `Testing connection to ${config.hostname}:${config.port}...`
+            `FileFly: Testing connection to ${config.hostname}:${config.port}...`
         )
         this._panel.webview.postMessage({ command: 'testResult', success: true })
     }
@@ -213,6 +213,11 @@ class ConnectionTreeProvider implements vscode.TreeDataProvider<ConnectionItem> 
         this._onDidChangeTreeData.fire()
     }
 
+    clearRuntimeConnection(connectionName: string): void {
+        this.connectionMap.delete(connectionName)
+        this._onDidChangeTreeData.fire()
+    }
+
     setStatus(connectionName: string, status: ConnectionStatus): void {
         this.statusMap.set(connectionName, status)
         this._onDidChangeTreeData.fire()
@@ -275,7 +280,7 @@ function handleEditMessage(msg: DashboardMessage, originalName: string): void {
                 vscode.ConfigurationTarget.Global
             ).then(() => {
                 vscode.window.showInformationMessage(
-                    `Connection "${config.connectionName}" updated successfully.`
+                    `FileFly: Connection "${config.connectionName}" updated successfully.`
                 )
                 currentEditPanel?.dispose()
             })
@@ -283,7 +288,7 @@ function handleEditMessage(msg: DashboardMessage, originalName: string): void {
         }
         case 'testConnection':
             vscode.window.showInformationMessage(
-                `Testing connection to ${msg.payload.hostname}:${msg.payload.port}...`
+                `FileFly: Testing connection to ${msg.payload.hostname}:${msg.payload.port}...`
             )
             currentEditPanel?.webview.postMessage({ command: 'testResult', success: true })
             break
@@ -334,6 +339,7 @@ function buildEditHtml(extensionUri: vscode.Uri, config: ConnectionConfig): stri
 // existing entry instead of creating a new one
 export function activate(context: vscode.ExtensionContext): void {
     const treeProvider = new ConnectionTreeProvider()
+    let activeConnectionName: string | undefined
     vscode.window.registerTreeDataProvider('fileflyConnections', treeProvider)
 
     context.subscriptions.push(
@@ -345,7 +351,14 @@ export function activate(context: vscode.ExtensionContext): void {
 
         vscode.commands.registerCommand(
             'filefly.refreshConnections',
-            () => treeProvider.refresh()
+            () => { 
+                if(activeConnectionName) {
+                    treeProvider.refresh()
+                    vscode.window.showInformationMessage("FileFly: Connection Refreshed")
+                } else {
+                    vscode.window.showInformationMessage("FileFly: No Active FileFly Connection")
+                }
+            }
         ),
 
         vscode.commands.registerCommand(
@@ -359,7 +372,7 @@ export function activate(context: vscode.ExtensionContext): void {
                         vscode.workspace.getConfiguration('filefly').get('connections') ?? []
 
                     if (configs.length === 0) {
-                        vscode.window.showErrorMessage('No saved FileFly connections available.')
+                        vscode.window.showErrorMessage('FileFly: No saved FileFly connections available.')
                         return
                     }
 
@@ -377,44 +390,127 @@ export function activate(context: vscode.ExtensionContext): void {
                         return
                     }
 
-                    //creates new connection, and sets initial state to disconnected
+                    //creates new connection, and sets initial state to disconnected 
+                    //in case of the try
                     item = new ConnectionItem(picked.config, 'disconnected')
                 }
 			
 
                 try {
+
+                    //Closes current connection if user selects another connection to connect to using FileFly:Connect
+                    if (activeConnectionName && activeConnectionName !== item.config.connectionName) {
+                        await disconnectDatabaseConnection()
+                        treeProvider.setStatus(activeConnectionName, 'disconnected')
+                        treeProvider.clearRuntimeConnection(activeConnectionName)
+                    }
+
                     const connection = await getDatabaseConnection(item.config)
                     if (connection === undefined) {
-                        vscode.window.showErrorMessage(`Failed to connect to "${item.config.connectionName}"`)
+                        vscode.window.showErrorMessage(`FileFly: Failed to connect to "${item.config.connectionName}"`)
                     } else {
+                        activeConnectionName = item.config.connectionName
                         treeProvider.setConnection(item.config.connectionName, connection)
                         treeProvider.setStatus(item.config.connectionName, 'connected')
                         vscode.window.showInformationMessage(`Connected to "${item.config.connectionName}"`)
                     }
                 } catch (err) {
                     console.log(err)
-                    vscode.window.showErrorMessage(`Failed to connect to "${item.config.connectionName}"`)
+                    vscode.window.showErrorMessage(`FileFly: Failed to connect to "${item.config.connectionName}"`)
                 }
             }
         ),
 
         vscode.commands.registerCommand(
             'filefly.disconnectConnection',
-            (item: ConnectionItem) => {
-                treeProvider.setStatus(item.config.connectionName, 'disconnected')
-                vscode.window.showInformationMessage(`Disconnected from "${item.config.connectionName}"`)
+            async () => {
+                if (!activeConnectionName) {
+                    vscode.window.showErrorMessage('FileFly: No Active FileFly Connection.')
+                    return
+                }
+
+                const connectionName = activeConnectionName
+
+                try {
+                    await disconnectDatabaseConnection()
+                    treeProvider.clearRuntimeConnection(connectionName)
+                    treeProvider.setStatus(connectionName, 'disconnected')
+                    activeConnectionName = undefined
+                    vscode.window.showInformationMessage(`FileFly: Disconnected from "${connectionName}"`)
+                } catch (err) {
+                    console.error(err)
+                    vscode.window.showErrorMessage(`FileFly: Failed to disconnect from "${connectionName}"`)
+                }
             }
         ),
 
         vscode.commands.registerCommand(
             'filefly.editConnection',
-            (item: ConnectionItem) =>
+            async (connitem?: ConnectionItem) => {
+
+                //same as in filefly:connect
+                let item = connitem
+
+                if (!item) {
+                    const configs: ConnectionConfig[] =
+                        vscode.workspace.getConfiguration('filefly').get('connections') ?? []
+
+                    if (configs.length === 0) {
+                        vscode.window.showErrorMessage('FileFly: No saved FileFly connections available.')
+                        return
+                    }
+
+                    const picked = await vscode.window.showQuickPick(
+                        configs.map(cfg => ({
+                            label: cfg.connectionName,
+                            description: `${cfg.hostname}:${cfg.port}/${cfg.database}`,
+                            config: cfg,
+                        })),
+                        { placeHolder: 'Select a FileFly connection to edit' }
+                    )
+
+                    if (!picked) {
+                        return
+                    }
+
+                    item = new ConnectionItem(picked.config, 'disconnected')
+                }
+
+                //open editing panel for selected connection
                 EditConnectionPanel.createOrShow(context.extensionUri, item.config, context)
+            }
         ),
 
         vscode.commands.registerCommand(
             'filefly.deleteConnection',
-            async (item: ConnectionItem) => {
+            async (connitem?: ConnectionItem) => {
+                let item = connitem
+
+                if (!item) {
+                    const configs: ConnectionConfig[] =
+                        vscode.workspace.getConfiguration('filefly').get('connections') ?? []
+
+                    if (configs.length === 0) {
+                        vscode.window.showErrorMessage('FileFly: No saved FileFly connections available.')
+                        return
+                    }
+
+                    const picked = await vscode.window.showQuickPick(
+                        configs.map(cfg => ({
+                            label: cfg.connectionName,
+                            description: `${cfg.hostname}:${cfg.port}/${cfg.database}`,
+                            config: cfg,
+                        })),
+                        { placeHolder: 'Select a FileFly connection to delete' }
+                    )
+
+                    if (!picked) {
+                        return
+                    }
+
+                    item = new ConnectionItem(picked.config, 'disconnected')
+                }
+
                 const answer = await vscode.window.showWarningMessage(
                     `Delete connection "${item.config.connectionName}"? This cannot be undone.`,
                     { modal: true },

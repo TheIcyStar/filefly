@@ -4,6 +4,7 @@ import * as path from 'path'
 import { disconnectDatabaseConnection, getDatabaseConnection } from './db/connectionManagement'
 import postgres from 'postgres'
 import { fileCreateListener } from './listeners/fileCreateListener'
+import { showUserConnectionPicker } from './utils/uiHelpers'
 
 //types 
 //note: largely doesn't work right now and is mostly just
@@ -169,7 +170,7 @@ function buildTooltip(config: ConnectionConfig, status: ConnectionStatus): vscod
     return md
 }
 
-class ConnectionItem extends vscode.TreeItem {
+export class ConnectionItem extends vscode.TreeItem {
     constructor(
         public readonly config: ConnectionConfig,
         public readonly status: ConnectionStatus
@@ -335,6 +336,7 @@ function buildEditHtml(extensionUri: vscode.Uri, config: ConnectionConfig): stri
     return baseHtml.replace('</body>', populateScript + '\n</body>')
 }
 
+
 // basically same functionality from first version, but pre-populates fields and updates an 
 // existing entry instead of creating a new one
 export function activate(context: vscode.ExtensionContext): void {
@@ -367,32 +369,8 @@ export function activate(context: vscode.ExtensionContext): void {
                 let item = connitem
 
                 if (!item) {
-                    //assigns empty array if no connection settings found
-                    const configs: ConnectionConfig[] =
-                        vscode.workspace.getConfiguration('filefly').get('connections') ?? []
-
-                    if (configs.length === 0) {
-                        vscode.window.showErrorMessage('FileFly: No saved FileFly connections available.')
-                        return
-                    }
-
-                    //Dropdown to pick connection
-                    const picked = await vscode.window.showQuickPick(
-                        configs.map(cfg => ({
-                            label: cfg.connectionName,
-                            description: `${cfg.hostname}:${cfg.port}/${cfg.database}`,
-                            config: cfg,
-                        })),
-                        { placeHolder: 'Select a FileFly connection to connect' }
-                    )
-
-                    if (!picked) {
-                        return
-                    }
-
-                    //creates new connection, and sets initial state to disconnected 
-                    //in case of the try
-                    item = new ConnectionItem(picked.config, 'disconnected')
+                    item = await showUserConnectionPicker('Select a FileFly connection to connect')
+                    if (!item) { return }
                 }
 			
 
@@ -452,28 +430,8 @@ export function activate(context: vscode.ExtensionContext): void {
                 let item = connitem
 
                 if (!item) {
-                    const configs: ConnectionConfig[] =
-                        vscode.workspace.getConfiguration('filefly').get('connections') ?? []
-
-                    if (configs.length === 0) {
-                        vscode.window.showErrorMessage('FileFly: No saved FileFly connections available.')
-                        return
-                    }
-
-                    const picked = await vscode.window.showQuickPick(
-                        configs.map(cfg => ({
-                            label: cfg.connectionName,
-                            description: `${cfg.hostname}:${cfg.port}/${cfg.database}`,
-                            config: cfg,
-                        })),
-                        { placeHolder: 'Select a FileFly connection to edit' }
-                    )
-
-                    if (!picked) {
-                        return
-                    }
-
-                    item = new ConnectionItem(picked.config, 'disconnected')
+                    item = await showUserConnectionPicker('Select a FileFly connection to edit')
+                    if (!item) { return }
                 }
 
                 //open editing panel for selected connection
@@ -487,28 +445,8 @@ export function activate(context: vscode.ExtensionContext): void {
                 let item = connitem
 
                 if (!item) {
-                    const configs: ConnectionConfig[] =
-                        vscode.workspace.getConfiguration('filefly').get('connections') ?? []
-
-                    if (configs.length === 0) {
-                        vscode.window.showErrorMessage('FileFly: No saved FileFly connections available.')
-                        return
-                    }
-
-                    const picked = await vscode.window.showQuickPick(
-                        configs.map(cfg => ({
-                            label: cfg.connectionName,
-                            description: `${cfg.hostname}:${cfg.port}/${cfg.database}`,
-                            config: cfg,
-                        })),
-                        { placeHolder: 'Select a FileFly connection to delete' }
-                    )
-
-                    if (!picked) {
-                        return
-                    }
-
-                    item = new ConnectionItem(picked.config, 'disconnected')
+                    item = await showUserConnectionPicker('Select a FileFly connection to delete')
+                    if (!item) { return }
                 }
 
                 const answer = await vscode.window.showWarningMessage(
@@ -536,5 +474,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
     )
 }
+
 
 export function deactivate(): void {}

@@ -232,18 +232,17 @@ export async function getWorkspaceTreeDiff(): Promise<FSNode[]> {
         }
 
         const localParent: DirectoryNode = nodeMap.get(nextParentPath) as DirectoryNode
-        const remoteParentMtime: number = dbFilesMap.get(nextParentPath)!
+        const remoteParentMtime: number | undefined = dbFilesMap.get(nextParentPath)
 
-        if(localParent.mtime! > remoteParentMtime) {
+        if(!remoteParentMtime || localParent.mtime! > remoteParentMtime) {
             //NEED_PUSH on all files
             curNode.status = "NEED_PUSH"
             fileDiffs.push(curNode)
             needPushDirectories.push(localParent.workspacePath)
 
-
-
         } else if(localParent.mtime! < remoteParentMtime) {
             localParent.status = "NEED_DELETE_LOCAL"
+
         } else {
             console.error(`getWorkspaceTreeDiff(): Sync error for (local) ${curNodePath}: "${nextParentPath}" has same mtime locally and remotely! Can't decide what to sync`)
         }

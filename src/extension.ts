@@ -525,9 +525,10 @@ export function activate(context: vscode.ExtensionContext): void {
                     existing.filter(c => c.connectionName !== item.config.connectionName),
                     vscode.ConfigurationTarget.Global
                 )
-
                 // an explicit refresh guarantees the status map is also cleared for this entry
                 treeProvider.setStatus(item.config.connectionName, 'disconnected')
+
+                vscode.window.showInformationMessage("FileFly: Connection Succesfully Deleted.")
             }
         ),
 

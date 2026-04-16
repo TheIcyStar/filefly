@@ -8,7 +8,7 @@ export async function showUserConnectionPicker(placeHolder: string): Promise<Con
         vscode.workspace.getConfiguration('filefly').get('connections') ?? []
 
     if (configs.length === 0) {
-        vscode.window.showErrorMessage('FileFly: No saved FileFly connections available.')
+        vscode.window.showErrorMessage(`FileFly: No saved FileFly connections available. Create a new connection using the "FileFly: New Multiplayer Connection" command.`)
         return undefined
     }
 

@@ -466,7 +466,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 // an explicit refresh guarantees the status map is also cleared for this entry
                 treeProvider.setStatus(item.config.connectionName, 'disconnected')
 
-                vscode.window.showInformationMessage("FileFly: Connection Succesfully Deleted.")
+                vscode.window.showInformationMessage(`FileFly: Connection "${item.config.connectionName}" Succesfully Deleted.`)
             }
         ),
 

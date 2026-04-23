@@ -10,26 +10,33 @@ CREATE TABLE IF NOT EXISTS directory (
     mtime       BIGINT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS fileflyuser (
+    userId              SERIAL PRIMARY KEY,
+    displayName         TEXT NOT NULL,
+    cursorColor         TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS openFile (
    filePath     TEXT PRIMARY KEY NOT NULL,
    userId       INT NOT NULL,
-   CONSTRAINT openFile_filepath_to_file_filepath FOREIGN KEY (filePath) REFERENCES file(path)
+   CONSTRAINT openFile_filepath_to_file_filepath FOREIGN KEY (filePath) REFERENCES file(path),
+    CONSTRAINT openFile_userId_to_fileflyuser_userId FOREIGN KEY (userId) REFERENCES fileflyuser(userId)
 );
 
 CREATE TABLE IF NOT EXISTS activeUser (
     userId              INT PRIMARY KEY NOT NULL,
-    colPos              INT NOT NULL,
-    rowPos              INT NOT NULL,
-    openFilePath        TEXT NOT NULL,
-    highlightStartRow   INT NOT NULL,
-    highlightStartCol   INT NOT NULL,
-    highlightStopRow    INT NOT NULL,
-    highlightStopCol    INT NOT NULL,
+    displayName         TEXT NOT NULL,
+    cursorColor         TEXT NOT NULL,
+    colPos              INT,
+    rowPos              INT,
+    openFilePath        TEXT,
+    highlightStartRow   INT,
+    highlightStartCol   INT,
+    highlightStopRow    INT,
+    highlightStopCol    INT,
+    CONSTRAINT activeUser_userId_to_fileflyuser_userId FOREIGN KEY (userId) REFERENCES fileflyuser(userId),
     CONSTRAINT activeUser_openFilePath_to_file_path FOREIGN KEY (openFilePath) REFERENCES file(path)
 );
-
-ALTER TABLE openFile
-ADD CONSTRAINT openFile_userId_to_activeUser_userId FOREIGN KEY (userId) REFERENCES activeUser(userId);
 
 CREATE TABLE IF NOT EXISTS chunk (
     filePath      TEXT NOT NULL,

@@ -24,6 +24,7 @@ type DirectoryNode = {
 type FSNodeDBSchema = {
     path: string,
     mtime: number
+    type: 'file' | 'directory'
 }
 
 /*
@@ -137,9 +138,9 @@ export async function getWorkspaceTreeDiff(): Promise<FSNode[]> {
     }
 
     const remoteFilePromise = db<FSNodeDBSchema[]>`
-        SELECT path, mtime FROM file
+        SELECT path, mtime, 'file' AS type FROM file
         UNION ALL
-        SELECT path, mtime from directory
+        SELECT path, mtime, 'directory' AS type from directory
     `
 
     //COALESCE(file.path, directory.path) AS path,
@@ -193,13 +194,23 @@ export async function getWorkspaceTreeDiff(): Promise<FSNode[]> {
                 fileDiffs.push(localParent)
 
             } else if(localParent.mtime! < remoteParentMtime){
-                const newNode = {
-                    workspacePath: dbFile.path,
-                    uri: vscode.Uri.joinPath(rootNode.uri, dbFile.path),
-                    parent: localParent,
-                    status: "NEED_PULL",
-                    type: FileType.File
-                } as FileNode
+                //Establish difference between dir and file
+                const newNode = dbFile.type === 'directory'
+                    ? {
+                        workspacePath: dbFile.path,
+                        uri: vscode.Uri.joinPath(rootNode.uri, dbFile.path),
+                        parent: localParent,
+                        status: "NEED_PULL",
+                        type: FileType.Directory,
+                        children: [],
+                    } as DirectoryNode
+                    : {
+                        workspacePath: dbFile.path,
+                        uri: vscode.Uri.joinPath(rootNode.uri, dbFile.path),
+                        parent: localParent,
+                        status: "NEED_PULL",
+                        type: FileType.File
+                    } as FileNode
                 localParent.children.push(newNode)
                 nodeMap.set(dbFile.path, newNode)
                 fileDiffs.push(newNode)

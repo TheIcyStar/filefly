@@ -2,7 +2,7 @@
   "name": "filefly",
   "displayName": "filefly",
   "version": "0.0.1",
-  "description": "Real time file editing", 
+  "description": "Real time file editing",
   "engines": {
     "vscode": "^1.110.0"
   },
@@ -12,6 +12,7 @@
   "activationEvents": [
     "onCommand:filefly.newConnection",
     "onCommand:filefly.editUserConfig",
+    "onCommand:filefly.syncFilesFromDatabase",
     "onCommand:filefly.refreshConnections",
     "onCommand:filefly.connectConnection",
     "onCommand:filefly.disconnectConnection",
@@ -62,6 +63,12 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "filefly.syncFilesFromDatabase",
+        "title": "Sync Files From Database",
+        "category": "FileFly",
+        "icon": "$(cloud-download)"
+      },
+      {
         "command": "filefly.connectConnection",
         "title": "Connect",
         "category": "FileFly",
@@ -97,6 +104,11 @@
           "command": "filefly.refreshConnections",
           "when": "view == fileflyConnections",
           "group": "navigation@2"
+        },
+        {
+          "command": "filefly.syncFilesFromDatabase",
+          "when": "view == fileflyConnections",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
@@ -125,15 +137,6 @@
     "configuration": {
       "title": "FileFly",
       "properties": {
-        "filefly.userConfig": {
-          "type": "object",
-          "description": "Your collaborator profile.",
-          "properties": {
-            "displayName": { "type": "string" },
-            "bio":         { "type": "string" },
-            "color":       { "type": "string" }
-          }
-        },
         "filefly.connections": {
           "type": "array",
           "default": [],
@@ -149,6 +152,12 @@
             ],
             "properties": {
               "connectionName": {
+                "type": "string"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "color": {
                 "type": "string"
               },
               "authType": {

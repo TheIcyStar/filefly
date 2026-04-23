@@ -1,17 +1,50 @@
 import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
-import { disconnectDatabaseConnection, getDatabaseConnection } from './db/connectionManagement'
+import { FileType } from 'vscode'
+import { disconnectDatabaseConnection, getConnection, getDatabaseConnection } from './db/connectionManagement'
+import { insertDirectory, insertFile } from './db/fileOperations'
+import { upsertUser } from './db/userOperations'
 import postgres from 'postgres'
 import { fileCreateListener } from './listeners/fileCreateListener'
+import { getActiveConnectionName, getActiveConnectionProfile, hasSavedUserConfigForConnection, saveActiveConnectionProfile, setActiveConnectionName, UserConfig } from './utils/profileConnectionState'
 import { showUserConnectionPicker } from './utils/uiHelpers'
+import { getFileContents } from './utils/fileTracking'
+import { markCurrentUserActive, markCurrentUserInactive } from './utils/userTracking'
+import { getWorkspaceTreeDiff } from './utils/filetreeDiff'
+import { connectionTargetKey } from './utils/generalHelpers'
 
-//types 
+type DirectoryRow = {
+    path: string
+}
+
+type FileRow = {
+    path: string
+    content: string
+}
+
+async function pushDirectoryToDatabase(dbPath: string, uri: vscode.Uri): Promise<void> {
+    const stat = await vscode.workspace.fs.stat(uri)
+    await insertDirectory(dbPath, stat.mtime)
+}
+
+async function pushFileToDatabase(dbPath: string, uri: vscode.Uri): Promise<void> {
+    const [stat, content] = await Promise.all([
+        vscode.workspace.fs.stat(uri),
+        getFileContents(uri),
+    ])
+
+    await insertFile(dbPath, stat.mtime, content ?? '')
+}
+
+//types
 //note: largely doesn't work right now and is mostly just
 // UI - saving that workload for others.
 
 export interface ConnectionConfig {
     connectionName: string
+    displayName?: string
+    color?: string
     authType: string
     username: string
     password: string
@@ -20,11 +53,6 @@ export interface ConnectionConfig {
     connectionMode: string
     database: string
     serviceName: string
-}
-
-interface UserConfig {
-    displayName: string
-    color: string
 }
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -60,6 +88,117 @@ function getNonce(): string {
     return text
 }
 
+function userIdKey(connectionName: string): string {
+    return `filefly.userId.${connectionName}`
+}
+
+function getStoredUserId(context: vscode.ExtensionContext, connectionName: string): number | undefined {
+    return context.globalState.get<number>(userIdKey(connectionName))
+}
+
+function storeUserId(context: vscode.ExtensionContext, connectionName: string, userId: number): void {
+    context.globalState.update(userIdKey(connectionName), userId)
+}
+
+function dbPathToRelative(dbPath: string): string {
+    if (dbPath === '.') {
+        return ''
+    }
+
+    return dbPath.startsWith('./') ? dbPath.slice(2) : dbPath
+}
+
+async function syncWorkspaceFromDatabase(): Promise<void> {
+    const connection = getConnection()
+    if (!connection) {
+        vscode.window.showErrorMessage('FileFly: Connect to a database before syncing files.')
+        return
+    }
+
+    const folders = vscode.workspace.workspaceFolders
+    if (!folders || folders.length !== 1) {
+        vscode.window.showErrorMessage('FileFly: Sync requires exactly one open workspace folder.')
+        return
+    }
+
+    const diffs = await getWorkspaceTreeDiff()
+    const pullDiffs = diffs.filter((node) => node.status === 'NEED_PULL')
+    const pushDiffs = diffs.filter((node) => node.status === 'NEED_PUSH')
+    const unresolvedDiffs = diffs.filter(
+        (node) => node.status !== 'NEED_PULL' && node.status !== 'NEED_PUSH'
+    )
+
+    if (pullDiffs.length === 0 && pushDiffs.length === 0) {
+        if (unresolvedDiffs.length === 0) {
+            vscode.window.showInformationMessage('FileFly: Workspace is already in sync with the database.')
+        } else {
+            vscode.window.showWarningMessage(
+                `FileFly: Nothing to pull or push automatically. ${unresolvedDiffs.length} item(s) still need manual conflict handling.`
+            )
+        }
+        return
+    }
+
+    const confirm = await vscode.window.showWarningMessage(
+        `FileFly: Pull ${pullDiffs.length} item(s) from the database and push ${pushDiffs.length} local item(s) to the database? ${unresolvedDiffs.length} conflict item(s) will be left unchanged.`,
+        { modal: true },
+        'Sync Now'
+    )
+
+    if (confirm !== 'Sync Now') {
+        return
+    }
+
+    const rootUri = folders[0].uri
+    const decoder = new TextEncoder()
+
+    const fileRows = await connection<FileRow[]>`
+            SELECT path, content
+            FROM file
+            ORDER BY LENGTH(path) ASC
+        `
+    const fileContentMap = new Map(fileRows.map((row) => [row.path, row.content]))
+
+    const sortedPushDiffs = [...pushDiffs].sort((left, right) => left.workspacePath.length - right.workspacePath.length)
+    for (const node of sortedPushDiffs) {
+        if (node.workspacePath === '.') {
+            continue
+        }
+
+        if (node.type === FileType.Directory) {
+            await pushDirectoryToDatabase(node.workspacePath, node.uri)
+            continue
+        }
+
+        await pushFileToDatabase(node.workspacePath, node.uri)
+    }
+
+    const sortedPullDiffs = [...pullDiffs].sort((left, right) => left.workspacePath.length - right.workspacePath.length)
+    for (const node of sortedPullDiffs) {
+        const rel = dbPathToRelative(node.workspacePath)
+        if (!rel) {
+            continue
+        }
+
+        if (node.type === FileType.Directory) {
+            await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(rootUri, rel))
+            continue
+        }
+
+        const fileUri = vscode.Uri.joinPath(rootUri, rel)
+        const parentRel = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : ''
+        if (parentRel) {
+            await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(rootUri, parentRel))
+        }
+        await vscode.workspace.fs.writeFile(fileUri, decoder.encode(fileContentMap.get(node.workspacePath) ?? ''))
+    }
+
+    vscode.window.showInformationMessage(
+        `FileFly: Pulled ${pullDiffs.length} item(s) and pushed ${pushDiffs.length} item(s). ${unresolvedDiffs.length} item(s) still need manual conflict handling.`
+    )
+}
+
+//since it's not just the connection anymore, I renamed this + a few other things
 function loadView(extensionUri: vscode.Uri, viewName: string, title: string): string {
     const viewDir = path.join(extensionUri.fsPath, 'dist', 'views', viewName)
     const html    = fs.readFileSync(path.join(viewDir, 'index.html'), 'utf8')
@@ -92,13 +231,15 @@ class UserConfigPanel {
         panel: vscode.WebviewPanel,
         extensionUri: vscode.Uri,
         private readonly _chainToConnection: boolean,
+        private readonly _context: vscode.ExtensionContext,
+        private _userId: number | undefined,
         existingConfig: UserConfig | undefined
     ) {
         this._panel = panel
         this._panel.webview.html = buildUserConfigHtml(extensionUri, existingConfig)
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables)
         this._panel.webview.onDidReceiveMessage(
-            (msg: UserConfigMessage) => this._handleMessage(msg, extensionUri),
+            (msg: UserConfigMessage) => this._handleMessage(msg),
             null,
             this._disposables
         )
@@ -111,8 +252,10 @@ class UserConfigPanel {
         chainToConnection = true
     ): void {
         const column = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One
-        const existing: UserConfig | undefined =
-            vscode.workspace.getConfiguration('filefly').get('userConfig')
+        const existing = getActiveConnectionProfile(_context)
+        const activeConnectionName = getActiveConnectionName(_context)
+
+        const userId = activeConnectionName ? getStoredUserId(_context, activeConnectionName) : undefined
 
         const title = chainToConnection ? 'Your Profile' : 'Edit Your Profile'
 
@@ -127,13 +270,13 @@ class UserConfigPanel {
             }
         )
 
-        new UserConfigPanel(panel, extensionUri, chainToConnection, existing)
+        new UserConfigPanel(panel, extensionUri, chainToConnection, _context, userId, existing)
     }
 
-    private _handleMessage(msg: UserConfigMessage, extensionUri: vscode.Uri): void {
+    private _handleMessage(msg: UserConfigMessage): void {
         switch (msg.command) {
             case 'submit':
-                this._saveUserConfig(msg.payload, extensionUri)
+                this._saveUserConfig(msg.payload)
                 break
             case 'cancel':
                 this.dispose()
@@ -141,17 +284,38 @@ class UserConfigPanel {
         }
     }
 
-    private _saveUserConfig(config: UserConfig, extensionUri: vscode.Uri): void {
-        vscode.workspace.getConfiguration('filefly')
-            .update('userConfig', config, vscode.ConfigurationTarget.Global)
-            .then(() => {
-                this.dispose()
-                if (this._chainToConnection) {
-                    ConnectionDashboardPanel.createOrShow(extensionUri)
-                } else {
-                    vscode.window.showInformationMessage('Profile updated.')
+    private _saveUserConfig(config: UserConfig): void {
+        if (getConnection() === undefined) {
+            vscode.window.showWarningMessage(
+                'Connect with FileFly: Connect before saving your profile.'
+            )
+            return
+        }
+
+        ;(async () => {
+            try {
+                // Save to database first. Local settings should only be updated on successful DB sync.
+                // On first save userId is undefined — Postgres assigns one via SERIAL and we store it.
+                const assignedId = await upsertUser(this._userId, config.displayName, config.color)
+                if (this._userId === undefined) {
+                    this._userId = assignedId
+                    const activeConnectionName = getActiveConnectionName(this._context)
+                    if (activeConnectionName) {
+                        storeUserId(this._context, activeConnectionName, assignedId)
+                    }
                 }
-            })
+
+                await saveActiveConnectionProfile(this._context, config)
+
+                this.dispose()
+                vscode.window.showInformationMessage('Profile updated and synced to FileFly database.')
+            } catch (err) {
+                console.error('Failed to save user config to database:', err)
+                vscode.window.showErrorMessage(
+                    'Could not save profile to FileFly database. Local profile was not updated.'
+                )
+            }
+        })()
     }
 
     public dispose(): void {
@@ -162,7 +326,7 @@ class UserConfigPanel {
     }
 }
 
-/* 
+/*
 Builds the user config HTML, injecting a pre-population script when an
 existing config is provided so the form opens with the user's saved values.
  */
@@ -189,7 +353,7 @@ function buildUserConfigHtml(extensionUri: vscode.Uri, existing: UserConfig | un
 }
 
 /*
-    placeholder/proof of concept - for now, 
+    placeholder/proof of concept - for now,
     most of this sits until someone else implements
      legit TCP probing or handshakes
 */
@@ -245,6 +409,15 @@ class ConnectionDashboardPanel {
                 `FileFly: A connection named "${config.connectionName}" already exists.`
             )
             this._panel.webview.postMessage({ command: 'saveFailed', reason: 'duplicate' })
+            return
+        }
+
+        const target = connectionTargetKey(config)
+        if (existing.some(c => connectionTargetKey(c) === target)) {
+            vscode.window.showErrorMessage(
+                'FileFly: A saved connection already points to this database target (same host, port, and database).'
+            )
+            this._panel.webview.postMessage({ command: 'saveFailed', reason: 'duplicate-target' })
             return
         }
 
@@ -308,7 +481,7 @@ export class ConnectionItem extends vscode.TreeItem {
         /*
         contextValue is matched against the when clauses in package.json menus
             to show Connect vs Disconnect in the right context.
-            
+
          */
         this.contextValue = status === 'connected' ? 'fileflyConnectionActive' : 'fileflyConnection'
     }
@@ -399,10 +572,27 @@ function handleEditMessage(msg: DashboardMessage, originalName: string): void {
             const settings = vscode.workspace.getConfiguration('filefly')
             const existing: ConnectionConfig[] = settings.get('connections') ?? []
 
+            if (existing.some(c => c.connectionName === config.connectionName && c.connectionName !== originalName)) {
+                vscode.window.showErrorMessage(
+                    `FileFly: A connection named "${config.connectionName}" already exists.`
+                )
+                currentEditPanel?.webview.postMessage({ command: 'saveFailed', reason: 'duplicate' })
+                return
+            }
+
+            const target = connectionTargetKey(config)
+            if (existing.some(c => c.connectionName !== originalName && connectionTargetKey(c) === target)) {
+                vscode.window.showErrorMessage(
+                    'FileFly: Another saved connection already points to this database target (same host, port, and database).'
+                )
+                currentEditPanel?.webview.postMessage({ command: 'saveFailed', reason: 'duplicate-target' })
+                return
+            }
+
             // replace the entry that matches the original name, preserving order.
             settings.update(
                 'connections',
-                existing.map(c => c.connectionName === originalName ? config : c),
+                existing.map(c => c.connectionName === originalName ? { ...c, ...config } : c),
                 vscode.ConfigurationTarget.Global
             ).then(() => {
                 vscode.window.showInformationMessage(
@@ -425,8 +615,8 @@ function handleEditMessage(msg: DashboardMessage, originalName: string): void {
 }
 
 /*
-Takes the base html and injects a script that populates the fields with the provided config values, then calls 
-and sets the correct visibility for the password field based on auth type 
+Takes the base html and injects a script that populates the fields with the provided config values, then calls
+and sets the correct visibility for the password field based on auth type
  */
 function buildEditHtml(extensionUri: vscode.Uri, config: ConnectionConfig): string {
     const baseHtml = getConnectionDashboardHtml(extensionUri, `Edit Connection: ${config.connectionName}`)
@@ -461,7 +651,7 @@ function buildEditHtml(extensionUri: vscode.Uri, config: ConnectionConfig): stri
 }
 
 
-// basically same functionality from first version, but pre-populates fields and updates an 
+// basically same functionality from first version, but pre-populates fields and updates an
 // existing entry instead of creating a new one
 export function activate(context: vscode.ExtensionContext): void {
     const treeProvider = new ConnectionTreeProvider()
@@ -472,7 +662,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
         vscode.commands.registerCommand(
             'filefly.newConnection',
-            () => UserConfigPanel.createOrShow(context.extensionUri, context, true)
+            () => ConnectionDashboardPanel.createOrShow(context.extensionUri)
         ),
 
         vscode.commands.registerCommand(
@@ -482,12 +672,24 @@ export function activate(context: vscode.ExtensionContext): void {
 
         vscode.commands.registerCommand(
             'filefly.refreshConnections',
-            () => { 
+            () => {
                 if(activeConnectionName) {
                     treeProvider.refresh()
                     vscode.window.showInformationMessage("FileFly: Connection Refreshed")
                 } else {
                     vscode.window.showInformationMessage("FileFly: No Active FileFly Connection")
+                }
+            }
+        ),
+
+        vscode.commands.registerCommand(
+            'filefly.syncFilesFromDatabase',
+            async () => {
+                try {
+                    await syncWorkspaceFromDatabase()
+                } catch (err) {
+                    console.error('Failed syncing workspace from database:', err)
+                    vscode.window.showErrorMessage('FileFly: Failed to sync workspace from database.')
                 }
             }
         ),
@@ -501,12 +703,18 @@ export function activate(context: vscode.ExtensionContext): void {
                     item = await showUserConnectionPicker('Select a FileFly connection to connect')
                     if (!item) { return }
                 }
-			
+
 
                 try {
 
                     //Closes current connection if user selects another connection to connect to using FileFly:Connect
                     if (activeConnectionName && activeConnectionName !== item.config.connectionName) {
+                        try {
+                            await markCurrentUserInactive(context)
+                        } catch (err) {
+                            console.error('Failed removing active-user presence while switching connections:', err)
+                        }
+                        await setActiveConnectionName(context, undefined)
                         await disconnectDatabaseConnection()
                         treeProvider.setStatus(activeConnectionName, 'disconnected')
                         treeProvider.clearRuntimeConnection(activeConnectionName)
@@ -517,9 +725,34 @@ export function activate(context: vscode.ExtensionContext): void {
                         vscode.window.showErrorMessage(`FileFly: Failed to connect to "${item.config.connectionName}"`)
                     } else {
                         activeConnectionName = item.config.connectionName
+                        await setActiveConnectionName(context, item.config.connectionName)
                         treeProvider.setConnection(item.config.connectionName, connection)
                         treeProvider.setStatus(item.config.connectionName, 'connected')
+
+                        const needsInitialProfile = !hasSavedUserConfigForConnection(item.config.connectionName)
+
+                        try {
+                            await markCurrentUserActive(context)
+                        } catch (err) {
+                            console.error('Failed marking user as active after connect:', err)
+                            vscode.window.showWarningMessage(
+                                'FileFly: Connected, but failed to record active-user presence.'
+                            )
+                        }
+
                         vscode.window.showInformationMessage(`Connected to "${item.config.connectionName}"`)
+
+                        if (needsInitialProfile) {
+                            UserConfigPanel.createOrShow(context.extensionUri, context, false)
+                        }
+
+                        const syncAction = await vscode.window.showInformationMessage(
+                            'FileFly: Pull database files into this workspace now? Use this when first connecting.',
+                            'Sync From DB'
+                        )
+                        if (syncAction === 'Sync From DB') {
+                            await vscode.commands.executeCommand('filefly.syncFilesFromDatabase')
+                        }
                     }
                 } catch (err) {
                     console.log(err)
@@ -539,6 +772,13 @@ export function activate(context: vscode.ExtensionContext): void {
                 const connectionName = activeConnectionName
 
                 try {
+                    try {
+                        await markCurrentUserInactive(context)
+                    } catch (err) {
+                        console.error('Failed removing active-user presence on disconnect:', err)
+                    }
+
+                    await setActiveConnectionName(context, undefined)
                     await disconnectDatabaseConnection()
                     treeProvider.clearRuntimeConnection(connectionName)
                     treeProvider.setStatus(connectionName, 'disconnected')

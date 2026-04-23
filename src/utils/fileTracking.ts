@@ -16,23 +16,25 @@ export class chunk {
 
 
 
-export async function getFileContents() {
-    const activeEditor = vscode.window.activeTextEditor;
+export async function getFileContents(uri?: vscode.Uri): Promise<string | undefined> {
+    if (uri) {
+        const document = await vscode.workspace.openTextDocument(uri)
+        return document.getText()
+    }
 
-    if (!activeEditor)
-        return;
+    const activeEditor = vscode.window.activeTextEditor
+    if (!activeEditor) {
+        return undefined
+    }
 
-    const document = await vscode.workspace.openTextDocument(activeEditor.document.uri)
-
-    return document.getText();
-        
+    return activeEditor.document.getText()
 }
 
 
 
 
 export async function makeChunks(): Promise<chunk[] | undefined> {
-    const content = await getFileContents();
+    const content = await getFileContents()
 
     if (!content) {
         return undefined;

@@ -1,7 +1,13 @@
 
 CREATE TABLE IF NOT EXISTS file (
-    path        TEXT PRIMARY KEY NOT NULL,
+    path        TEXT PRIMARY KEY NOT NULL, -- Unix style path
+    mtime       BIGINT NOT NULL,
     content     TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS directory (
+    path        TEXT PRIMARY KEY NOT NULL,  -- Unix style path, workspace folder is "."
+    mtime       BIGINT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS openFile (
@@ -35,4 +41,6 @@ CREATE TABLE IF NOT EXISTS chunk (
     stopPosCol    INT NOT NULL,
     PRIMARY KEY (filePath, num),
     FOREIGN KEY (filePath) REFERENCES file(path) ON DELETE CASCADE
-)
+);
+
+INSERT INTO directory VALUES ('.', 0); --Root directory that will always get pushed to

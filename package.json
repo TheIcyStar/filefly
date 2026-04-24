@@ -4,15 +4,17 @@
   "version": "0.0.1",
   "description": "Real time file editing",
   "engines": {
+  "description": "Real time file editing",
     "vscode": "^1.110.0"
   },
   "categories": [
     "Other"
   ],
   "activationEvents": [
+    "onCommand:filefly.resetState",
     "onCommand:filefly.newConnection",
     "onCommand:filefly.editUserConfig",
-    "onCommand:filefly.syncFilesFromDatabase",
+    "onCommand:filefly.startRealtimeSync",
     "onCommand:filefly.refreshConnections",
     "onCommand:filefly.connectConnection",
     "onCommand:filefly.disconnectConnection",
@@ -51,6 +53,12 @@
         "icon": "$(plug)"
       },
       {
+        "command": "filefly.resetState",
+        "title": "Reset Extension State",
+        "category": "FileFly",
+        "icon": "$(trash)"
+      },
+      {
         "command": "filefly.editUserConfig",
         "title": "Edit Your Profile",
         "category": "FileFly",
@@ -63,8 +71,8 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "filefly.syncFilesFromDatabase",
-        "title": "Sync Files From Database",
+        "command": "filefly.startRealtimeSync",
+        "title": "Start Real-Time Sync",
         "category": "FileFly",
         "icon": "$(cloud-download)"
       },
@@ -106,7 +114,7 @@
           "group": "navigation@2"
         },
         {
-          "command": "filefly.syncFilesFromDatabase",
+          "command": "filefly.startRealtimeSync",
           "when": "view == fileflyConnections",
           "group": "navigation@3"
         }
@@ -201,10 +209,10 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
+    "npm-run-all": "^4.1.5",
     "@types/node": "22.x",
     "@types/vscode": "^1.110.0",
     "esbuild": "^0.27.3",
-    "npm-run-all": "^4.1.5",
     "typescript": "^5.9.3"
   },
   "dependencies": {

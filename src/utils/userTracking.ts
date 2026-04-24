@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { upsertUser } from '../db/userOperations'
 import { removeActiveUser, updateActiveUserPresence } from '../db/activeUserOperations'
-import { toUnixPath } from './generalHelpers'
 import { getActiveConnectionName, getActiveConnectionProfile } from './profileConnectionState'
 
 export interface GridPosition {
@@ -40,7 +39,7 @@ export function getHighlightPositions(): GridPosition[] | undefined {
 
     const highlightStop = activeEditor.selection.end;
 
-    
+
     return [
             {row: highlightStart.line + 1, col: highlightStart.character + 1},
             {row: highlightStart.line + 1, col: highlightStop.character + 1}
@@ -50,40 +49,38 @@ export function getHighlightPositions(): GridPosition[] | undefined {
 };
 
 export async function markCurrentUserActive(context: vscode.ExtensionContext): Promise<void> {
-    const editor = vscode.window.activeTextEditor
-
     const profile = getActiveConnectionProfile(context)
     const displayName = profile?.displayName?.trim() || 'Anonymous'
     const color = profile?.color || '#4fc3f7'
 
     const activeConnectionName = getActiveConnectionName(context)
     const userIdKey = activeConnectionName ? `filefly.userId.${activeConnectionName}` : undefined
-    const localUserId = userIdKey ? context.globalState.get<number>(userIdKey) : undefined
-    const userId = await upsertUser(localUserId, displayName, color)
-    if (localUserId === undefined && userIdKey) {
-        await context.globalState.update(userIdKey, userId)
+    let localUserId = userIdKey ? context.globalState.get<number>(userIdKey) : undefined
+
+    if (localUserId === undefined) {
+        //If this is a first connect for this connection: insert a new row into fileflyuser and persist the assigned id
+        const newId = await upsertUser(undefined, displayName, color)
+        if (userIdKey) {
+            await context.globalState.update(userIdKey, newId)
+        }
+        localUserId = newId
     }
 
-    const hasFileContext = Boolean(editor && !editor.document.isUntitled && editor.document.uri.scheme === 'file')
+    const userId = localUserId
 
-    const openFilePath = hasFileContext
-        ? toUnixPath(vscode.workspace.asRelativePath(editor!.document.uri, false))
-        : null
-    const selection = hasFileContext ? editor!.selection : undefined
-    const active = selection?.active
-    const anchor = selection?.anchor
+    const openFilePath = null
 
     await updateActiveUserPresence({
         userId,
         displayName,
         cursorColor: color,
-        colPos: active?.character ?? null,
-        rowPos: active?.line ?? null,
+        colPos: null,
+        rowPos: null,
         openFilePath,
-        highlightStartRow: anchor?.line ?? null,
-        highlightStartCol: anchor?.character ?? null,
-        highlightStopRow: active?.line ?? null,
-        highlightStopCol: active?.character ?? null,
+        highlightStartRow: null,
+        highlightStartCol: null,
+        highlightStopRow: null,
+        highlightStopCol: null,
     })
 }
 
@@ -95,7 +92,16 @@ export async function markCurrentUserInactive(context: vscode.ExtensionContext):
         return
     }
 
+    // Meant to save changes of current file if window is closed or user dicsonnects as their have been instances of db being more up to date than local.
+    // doesnt really work when window is clossed, still needs testing/fixing
+    const activeEditor = vscode.window.activeTextEditor
+    if (activeEditor?.document && activeEditor.document.uri.scheme === 'file' && activeEditor.document.isDirty) {
+        try {
+            await activeEditor.document.save()
+        } catch (error) {
+            console.error('Failed to save active editor before disconnect:', error)
+        }
+    }
+
     await removeActiveUser(userId)
 }
-
-

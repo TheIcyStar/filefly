@@ -1,41 +1,24 @@
 import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
-import { FileType } from 'vscode'
 import { disconnectDatabaseConnection, getConnection, getDatabaseConnection } from './db/connectionManagement'
-import { insertDirectory, insertFile } from './db/fileOperations'
 import { upsertUser } from './db/userOperations'
+import { updateActiveUserPresence } from './db/activeUserOperations'
 import postgres from 'postgres'
-import { fileCreateListener } from './listeners/fileCreateListener'
+import { fileCreateListener, fileDeleteListener, fileRenameListener, textDocumentChangeListener } from './listeners/fileListeners'
 import { getActiveConnectionName, getActiveConnectionProfile, hasSavedUserConfigForConnection, saveActiveConnectionProfile, setActiveConnectionName, UserConfig } from './utils/profileConnectionState'
 import { showUserConnectionPicker } from './utils/uiHelpers'
-import { getFileContents } from './utils/fileTracking'
 import { markCurrentUserActive, markCurrentUserInactive } from './utils/userTracking'
 import { getWorkspaceTreeDiff } from './utils/filetreeDiff'
 import { connectionTargetKey } from './utils/generalHelpers'
+import { runAsRemoteApply } from './utils/syncGuard'
+import { makeWorkspaceFromDatabase } from './local/makeWorkspace'
+import { updateWorkspaceFromDiff } from './local/updateWorkspace'
 
-type DirectoryRow = {
-    path: string
-}
-
-type FileRow = {
-    path: string
-    content: string
-}
-
-async function pushDirectoryToDatabase(dbPath: string, uri: vscode.Uri): Promise<void> {
-    const stat = await vscode.workspace.fs.stat(uri)
-    await insertDirectory(dbPath, stat.mtime)
-}
-
-async function pushFileToDatabase(dbPath: string, uri: vscode.Uri): Promise<void> {
-    const [stat, content] = await Promise.all([
-        vscode.workspace.fs.stat(uri),
-        getFileContents(uri),
-    ])
-
-    await insertFile(dbPath, stat.mtime, content ?? '')
-}
+let realTimeSyncInterval: NodeJS.Timeout | undefined
+let realTimeSyncRunning = false
+const realTimeSyncIntervalMs = 200
+let _extensionContext: vscode.ExtensionContext | undefined
 
 //types
 //note: largely doesn't work right now and is mostly just
@@ -100,102 +83,47 @@ function storeUserId(context: vscode.ExtensionContext, connectionName: string, u
     context.globalState.update(userIdKey(connectionName), userId)
 }
 
-function dbPathToRelative(dbPath: string): string {
-    if (dbPath === '.') {
-        return ''
+async function realTimeSync(): Promise<void> {
+    if (realTimeSyncInterval) {
+        clearInterval(realTimeSyncInterval)
+        realTimeSyncInterval = undefined
     }
 
-    return dbPath.startsWith('./') ? dbPath.slice(2) : dbPath
-}
+    // During the initial workspace rebuild, we may receive file events triggered by our own fs operations. This prevents that.
+    console.log('[FileFly][sync] initial rebuild start')
+    await runAsRemoteApply(async () => {
+            await makeWorkspaceFromDatabase()
+    })
+    console.log('[FileFly][sync] initial rebuild done')
 
-async function syncWorkspaceFromDatabase(): Promise<void> {
-    const connection = getConnection()
-    if (!connection) {
-        vscode.window.showErrorMessage('FileFly: Connect to a database before syncing files.')
-        return
-    }
+    console.log('[FileFly][sync] realtime sync active')
+    console.log('[FileFly][sync] any file events will be logged below')
 
-    const folders = vscode.workspace.workspaceFolders
-    if (!folders || folders.length !== 1) {
-        vscode.window.showErrorMessage('FileFly: Sync requires exactly one open workspace folder.')
-        return
-    }
-
-    const diffs = await getWorkspaceTreeDiff()
-    const pullDiffs = diffs.filter((node) => node.status === 'NEED_PULL')
-    const pushDiffs = diffs.filter((node) => node.status === 'NEED_PUSH')
-    const unresolvedDiffs = diffs.filter(
-        (node) => node.status !== 'NEED_PULL' && node.status !== 'NEED_PUSH'
-    )
-
-    if (pullDiffs.length === 0 && pushDiffs.length === 0) {
-        if (unresolvedDiffs.length === 0) {
-            vscode.window.showInformationMessage('FileFly: Workspace is already in sync with the database.')
-        } else {
-            vscode.window.showWarningMessage(
-                `FileFly: Nothing to pull or push automatically. ${unresolvedDiffs.length} item(s) still need manual conflict handling.`
-            )
-        }
-        return
-    }
-
-    const confirm = await vscode.window.showWarningMessage(
-        `FileFly: Pull ${pullDiffs.length} item(s) from the database and push ${pushDiffs.length} local item(s) to the database? ${unresolvedDiffs.length} conflict item(s) will be left unchanged.`,
-        { modal: true },
-        'Sync Now'
-    )
-
-    if (confirm !== 'Sync Now') {
-        return
-    }
-
-    const rootUri = folders[0].uri
-    const decoder = new TextEncoder()
-
-    const fileRows = await connection<FileRow[]>`
-            SELECT path, content
-            FROM file
-            ORDER BY LENGTH(path) ASC
-        `
-    const fileContentMap = new Map(fileRows.map((row) => [row.path, row.content]))
-
-    const sortedPushDiffs = [...pushDiffs].sort((left, right) => left.workspacePath.length - right.workspacePath.length)
-    for (const node of sortedPushDiffs) {
-        if (node.workspacePath === '.') {
-            continue
+    realTimeSyncInterval = setInterval(async () => {
+        if (realTimeSyncRunning) {
+            console.log('[FileFly][sync] tick skipped: previous tick still running')
+            return
         }
 
-        if (node.type === FileType.Directory) {
-            await pushDirectoryToDatabase(node.workspacePath, node.uri)
-            continue
+
+        realTimeSyncRunning = true
+        try {
+            //console.log(`[FileFly][sync] tick begin`)
+
+            const diffs = await getWorkspaceTreeDiff()
+
+            //console.log(`[FileFly][sync] tick diffs: ${diffs.length}`)
+
+            await runAsRemoteApply(async () => {
+                await updateWorkspaceFromDiff(diffs)
+            })
+            //console.log('[FileFly][sync] tick apply done')
+        } catch (error) {
+            console.error('FileFly real-time sync failed:', error)
+        } finally {
+            realTimeSyncRunning = false
         }
-
-        await pushFileToDatabase(node.workspacePath, node.uri)
-    }
-
-    const sortedPullDiffs = [...pullDiffs].sort((left, right) => left.workspacePath.length - right.workspacePath.length)
-    for (const node of sortedPullDiffs) {
-        const rel = dbPathToRelative(node.workspacePath)
-        if (!rel) {
-            continue
-        }
-
-        if (node.type === FileType.Directory) {
-            await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(rootUri, rel))
-            continue
-        }
-
-        const fileUri = vscode.Uri.joinPath(rootUri, rel)
-        const parentRel = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : ''
-        if (parentRel) {
-            await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(rootUri, parentRel))
-        }
-        await vscode.workspace.fs.writeFile(fileUri, decoder.encode(fileContentMap.get(node.workspacePath) ?? ''))
-    }
-
-    vscode.window.showInformationMessage(
-        `FileFly: Pulled ${pullDiffs.length} item(s) and pushed ${pushDiffs.length} item(s). ${unresolvedDiffs.length} item(s) still need manual conflict handling.`
-    )
+    }, realTimeSyncIntervalMs)
 }
 
 //since it's not just the connection anymore, I renamed this + a few other things
@@ -304,6 +232,20 @@ class UserConfigPanel {
                         storeUserId(this._context, activeConnectionName, assignedId)
                     }
                 }
+
+                // If user is already active, sync the new display name and color into activeUser immediately
+                await updateActiveUserPresence({
+                    userId: assignedId,
+                    displayName: config.displayName,
+                    cursorColor: config.color,
+                    colPos: null,
+                    rowPos: null,
+                    openFilePath: null,
+                    highlightStartRow: null,
+                    highlightStartCol: null,
+                    highlightStopRow: null,
+                    highlightStopCol: null,
+                })
 
                 await saveActiveConnectionProfile(this._context, config)
 
@@ -654,11 +596,27 @@ function buildEditHtml(extensionUri: vscode.Uri, config: ConnectionConfig): stri
 // basically same functionality from first version, but pre-populates fields and updates an
 // existing entry instead of creating a new one
 export function activate(context: vscode.ExtensionContext): void {
+    _extensionContext = context
+
+    console.log('FileFly extension activated')
+    vscode.window.showInformationMessage('FileFly activated. Use the FileFly panel to connect to a database and start syncing files!')
+
     const treeProvider = new ConnectionTreeProvider()
     let activeConnectionName: string | undefined
     vscode.window.registerTreeDataProvider('fileflyConnections', treeProvider)
 
     context.subscriptions.push(
+
+        vscode.commands.registerCommand(
+            'filefly.resetState',
+            async () => {
+                const keys = context.globalState.keys()
+                for (const key of keys) {
+                    await context.globalState.update(key, undefined)
+                }
+                vscode.window.showInformationMessage('FileFly: Global state cleared.')
+            }
+        ),
 
         vscode.commands.registerCommand(
             'filefly.newConnection',
@@ -683,13 +641,28 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
 
         vscode.commands.registerCommand(
-            'filefly.syncFilesFromDatabase',
+            'filefly.startRealtimeSync',
             async () => {
                 try {
-                    await syncWorkspaceFromDatabase()
+                    if (!getConnection()) {
+                        vscode.window.showErrorMessage('FileFly: Connect to a database before starting real-time sync.')
+                        return
+                    }
+
+                    const confirm = await vscode.window.showWarningMessage(
+                        'FileFly: Starting real-time sync will delete all current workspace files and rebuild from the database. Continue?',
+                        { modal: true },
+                        'Start Real-Time Sync'
+                    )
+
+                    if (confirm !== 'Start Real-Time Sync') {
+                        return
+                    }
+
+                    await realTimeSync()
                 } catch (err) {
-                    console.error('Failed syncing workspace from database:', err)
-                    vscode.window.showErrorMessage('FileFly: Failed to sync workspace from database.')
+                    console.error('Failed starting real-time sync:', err)
+                    vscode.window.showErrorMessage('FileFly: Failed to start real-time sync.')
                 }
             }
         ),
@@ -714,6 +687,10 @@ export function activate(context: vscode.ExtensionContext): void {
                         } catch (err) {
                             console.error('Failed removing active-user presence while switching connections:', err)
                         }
+                        if (realTimeSyncInterval) {
+                            clearInterval(realTimeSyncInterval)
+                            realTimeSyncInterval = undefined
+                        }
                         await setActiveConnectionName(context, undefined)
                         await disconnectDatabaseConnection()
                         treeProvider.setStatus(activeConnectionName, 'disconnected')
@@ -733,6 +710,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
                         try {
                             await markCurrentUserActive(context)
+                            console.log(`[FileFly] Connected to "${item.config.connectionName}"`)
                         } catch (err) {
                             console.error('Failed marking user as active after connect:', err)
                             vscode.window.showWarningMessage(
@@ -744,14 +722,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
                         if (needsInitialProfile) {
                             UserConfigPanel.createOrShow(context.extensionUri, context, false)
-                        }
-
-                        const syncAction = await vscode.window.showInformationMessage(
-                            'FileFly: Pull database files into this workspace now? Use this when first connecting.',
-                            'Sync From DB'
-                        )
-                        if (syncAction === 'Sync From DB') {
-                            await vscode.commands.executeCommand('filefly.syncFilesFromDatabase')
                         }
                     }
                 } catch (err) {
@@ -774,8 +744,14 @@ export function activate(context: vscode.ExtensionContext): void {
                 try {
                     try {
                         await markCurrentUserInactive(context)
+                        console.log(`[FileFly] Disconnected from "${connectionName}"`)
                     } catch (err) {
                         console.error('Failed removing active-user presence on disconnect:', err)
+                    }
+
+                    if (realTimeSyncInterval) {
+                        clearInterval(realTimeSyncInterval)
+                        realTimeSyncInterval = undefined
                     }
 
                     await setActiveConnectionName(context, undefined)
@@ -839,10 +815,20 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         ),
 
-        vscode.workspace.onDidCreateFiles(fileCreateListener)
+        vscode.workspace.onDidCreateFiles(fileCreateListener),
+
+        vscode.workspace.onDidDeleteFiles(fileDeleteListener),
+
+        vscode.workspace.onDidRenameFiles(fileRenameListener),
+
+        vscode.workspace.onDidChangeTextDocument(textDocumentChangeListener)
 
     )
 }
 
 
-export function deactivate(): void {}
+export async function deactivate(): Promise<void> {
+    if (_extensionContext) {
+        await markCurrentUserInactive(_extensionContext)
+    }
+}

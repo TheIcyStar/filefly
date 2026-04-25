@@ -20,10 +20,10 @@ export function updateActiveUserPresence(presence: ActiveUserPresence) {
     }
 
     return connection`
-        INSERT INTO activeUser 
+        INSERT INTO activeUser
         (userId, displayName, cursorColor, colPos, rowPos, openFilePath, highlightStartRow, highlightStartCol, highlightStopRow, highlightStopCol)
-        VALUES 
-        (${presence.userId}, ${presence.displayName}, ${presence.cursorColor}, ${presence.colPos}, ${presence.rowPos}, ${presence.openFilePath}, 
+        VALUES
+        (${presence.userId}, ${presence.displayName}, ${presence.cursorColor}, ${presence.colPos}, ${presence.rowPos}, ${presence.openFilePath},
          ${presence.highlightStartRow}, ${presence.highlightStartCol}, ${presence.highlightStopRow}, ${presence.highlightStopCol})
         ON CONFLICT (userId) DO UPDATE SET
             displayName = EXCLUDED.displayName,
@@ -63,6 +63,23 @@ export async function removeActiveUser(userId: number) {
         DELETE FROM activeUser
         WHERE userId = ${userId}
     `;
+}
+
+export async function getActiveUsersBelowLine(filePath: string, lineNumber: number, excludeUserId: number): Promise<ActiveUserPresence[]> {
+    const connection = getConnection()
+    if (connection === undefined) {
+        throw "connection is undefined"
+    }
+
+    const result = await connection<ActiveUserPresence[]>`
+        SELECT *
+        FROM activeUser
+        WHERE openFilePath = ${filePath}
+          AND rowPos > ${lineNumber}
+          AND userId != ${excludeUserId}
+    `
+
+    return result
 }
 
 export async function getAllActiveUsers() {

@@ -6,6 +6,7 @@ import { upsertUser } from './db/userOperations'
 import { updateActiveUserPresence } from './db/activeUserOperations'
 import postgres from 'postgres'
 import { fileCreateListener, fileDeleteListener, fileRenameListener, textDocumentChangeListener } from './listeners/fileListeners'
+import { registerEnterGuard } from './listeners/enterGuard'
 import { getActiveConnectionName, getActiveConnectionProfile, hasSavedUserConfigForConnection, saveActiveConnectionProfile, setActiveConnectionName, UserConfig } from './utils/profileConnectionState'
 import { showUserConnectionPicker } from './utils/uiHelpers'
 import { markCurrentUserActive, markCurrentUserInactive } from './utils/userTracking'
@@ -822,9 +823,41 @@ export function activate(context: vscode.ExtensionContext): void {
 
         vscode.workspace.onDidRenameFiles(fileRenameListener),
 
-        vscode.workspace.onDidChangeTextDocument(textDocumentChangeListener)
+        vscode.workspace.onDidChangeTextDocument(textDocumentChangeListener),
+
+        vscode.window.onDidChangeTextEditorSelection(async (event) => {
+            const connName = getActiveConnectionName(context)
+            const userId = connName ? getStoredUserId(context, connName) : undefined
+            if (userId === undefined || !getConnection()) { return }
+
+            const profile = getActiveConnectionProfile(context)
+            const displayName = profile?.displayName?.trim() || 'Anonymous'
+            const color = profile?.color || '#4fc3f7'
+
+            const editor = event.textEditor
+            const pos = editor.selection.active
+            const filePath = vscode.workspace.asRelativePath(editor.document.uri, false).replaceAll('\\', '/')
+
+            await updateActiveUserPresence({
+                userId,
+                displayName,
+                cursorColor: color,
+                rowPos: pos.line,
+                colPos: pos.character,
+                openFilePath: filePath,
+                highlightStartRow: null,
+                highlightStartCol: null,
+                highlightStopRow: null,
+                highlightStopCol: null,
+            })
+        })
 
     )
+
+    registerEnterGuard(context, () => {
+        const connName = getActiveConnectionName(context)
+        return connName ? getStoredUserId(context, connName) : undefined
+    })
 }
 
 

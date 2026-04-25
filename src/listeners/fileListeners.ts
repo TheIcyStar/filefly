@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import { applyLineNumberShift, deleteFile, deleteStaleLines, insertDirectory, insertFile, upsertLines } from '../db/fileOperations'
+import { deleteFile, deleteStaleLines, insertDirectory, insertFile, upsertLines } from '../db/fileOperations'
 import { getConnection } from '../db/connectionManagement'
 import { getFileContents } from '../utils/fileTracking'
 import { isApplyingRemoteSync } from '../utils/syncGuard'
@@ -158,7 +158,6 @@ export async function fileRenameListener(fileRenameEvent: vscode.FileRenameEvent
 }
 
 const _textChangeTimers = new Map<string, ReturnType<typeof setTimeout>>()
-const _pendingContentChanges = new Map<string, vscode.TextDocumentContentChangeEvent[]>()
 export const pendingLocalPushPaths = new Set<string>()
 export const lastKnownLines = new Map<string, string[]>()
 
@@ -185,10 +184,6 @@ export function textDocumentChangeListener(event: vscode.TextDocumentChangeEvent
         clearTimeout(existing)
     }
 
-    const pendingChanges = _pendingContentChanges.get(key) ?? []
-    pendingChanges.push(...event.contentChanges)
-    _pendingContentChanges.set(key, pendingChanges)
-
     // Mark this path as having a pending local push while debounce is active.
     pendingLocalPushPaths.add(relativePath)
 
@@ -199,9 +194,8 @@ export function textDocumentChangeListener(event: vscode.TextDocumentChangeEvent
             const mtime = Date.now()
             const newLines = content.split('\n')
             const prevLines = lastKnownLines.get(relativePath)
-            const debouncedChanges = _pendingContentChanges.get(key) ?? []
 
-            console.log(`[FileFly][textChange] push begin: ${relativePath} lines=${newLines.length} changes=${debouncedChanges.length} firstPush=${prevLines === undefined}`)
+            console.log(`[FileFly][textChange] push begin: ${relativePath} lines=${newLines.length} firstPush=${prevLines === undefined}`)
 
             if (prevLines === undefined) {
                 // First push for this file: full insert + seed line cache
@@ -209,51 +203,23 @@ export function textDocumentChangeListener(event: vscode.TextDocumentChangeEvent
                 await insertFile(relativePath, mtime, content)
                 await upsertLines(relativePath, newLines.map((c, i) => ({ number: i, content: c })))
                 await deleteStaleLines(relativePath, newLines.length)
+            } else if (newLines.length !== prevLines.length) {
+                // Line count changed (Enter/delete line): write full snapshot so DB line numbers
+                // are always authoritative for this client's current state.
+                console.log(`[FileFly][textChange] structural edit: ${prevLines.length} -> ${newLines.length} lines in ${relativePath}, writing full snapshot`)
+                await upsertLines(relativePath, newLines.map((c, i) => ({ number: i, content: c })))
+                await deleteStaleLines(relativePath, newLines.length)
+                await insertFile(relativePath, mtime, content)
             } else {
-                // For newline insertions, shift all DB lines after the insertion boundary
-                // by the number of new lines created so line numbers stay aligned.
-                const structuralInserts = [...debouncedChanges]
-                    .map((change) => {
-                        const removedLineCount = change.range.end.line - change.range.start.line
-                        const addedLineCount = change.text.split('\n').length - 1
-                        return {
-                            change,
-                            delta: addedLineCount - removedLineCount,
-                        }
-                    })
-                    .filter((item) => item.delta > 0)
-                    .sort((left, right) => {
-                        if (right.change.range.end.line !== left.change.range.end.line) {
-                            return right.change.range.end.line - left.change.range.end.line
-                        }
-                        return right.change.range.end.character - left.change.range.end.character
-                    })
-
-                if (structuralInserts.length > 0) {
-                    console.log(`[FileFly][textChange] ${structuralInserts.length} structural insert(s) detected for ${relativePath}`)
-                }
-                for (const item of structuralInserts) {
-                    const shiftStartLine = item.change.range.end.line + 1
-                    console.log(`[FileFly][textChange] shift: ${relativePath} startLine=${shiftStartLine} delta=+${item.delta} (range ${item.change.range.start.line}:${item.change.range.start.character}-${item.change.range.end.line}:${item.change.range.end.character})`)
-                    await applyLineNumberShift(relativePath, shiftStartLine, item.delta)
-                    console.log(`[FileFly][textChange] shift done: ${relativePath} startLine=${shiftStartLine}`)
-                }
-
-                // Incremental content updates after structural shifts.
+                // Content-only edit (no line count change): incremental upsert of touched lines only.
                 const changed: { number: number; content: string }[] = []
                 for (let i = 0; i < newLines.length; i++) {
                     if (prevLines[i] !== newLines[i]) {
                         changed.push({ number: i, content: newLines[i] })
                     }
                 }
-                console.log(`[FileFly][textChange] upsert: ${changed.length} changed line(s) in ${relativePath}`)
+                console.log(`[FileFly][textChange] incremental: ${changed.length} changed line(s) in ${relativePath}`)
                 await upsertLines(relativePath, changed)
-
-                if (newLines.length < prevLines.length) {
-                    const trimCount = prevLines.length - newLines.length
-                    console.log(`[FileFly][textChange] trim: removing ${trimCount} stale tail line(s) from ${relativePath} (keeping 0-${newLines.length - 1})`)
-                    await deleteStaleLines(relativePath, newLines.length)
-                }
                 await insertFile(relativePath, mtime, content)
             }
 
@@ -261,7 +227,6 @@ export function textDocumentChangeListener(event: vscode.TextDocumentChangeEvent
         } catch (error) {
             console.error('[FileFly][textChange] failed to push:', error)
         } finally {
-            _pendingContentChanges.delete(key)
             if (!_textChangeTimers.has(key)) {
                 pendingLocalPushPaths.delete(relativePath)
             }

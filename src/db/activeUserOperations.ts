@@ -38,19 +38,21 @@ export function updateActiveUserPresence(presence: ActiveUserPresence) {
     `;
 }
 
-export async function getActiveUsersOnFile(filePath: string) {
+
+export async function getActiveUsersOnFile(filePath: string): Promise<ActiveUserPresence[]> {
     const connection = getConnection();
     if (connection === undefined) {
         throw "connection is undefined"
     }
 
-    const result = await connection`
+    const result = await connection<ActiveUserPresence[]>`
         SELECT *
         FROM activeUser a
         WHERE a.openFilePath = ${filePath}
     `;
 
-    return result;
+    // Some postgres drivers return a wrapper, so force cast to plain array
+    return result as unknown as ActiveUserPresence[];
 }
 
 export async function removeActiveUser(userId: number) {
@@ -76,6 +78,23 @@ export async function getActiveUsersBelowLine(filePath: string, lineNumber: numb
         FROM activeUser
         WHERE openFilePath = ${filePath}
           AND rowPos > ${lineNumber}
+          AND userId != ${excludeUserId}
+    `
+
+    return result
+}
+
+export async function getActiveUsersOnLine(filePath: string, lineNumber: number, excludeUserId: number): Promise<ActiveUserPresence[]> {
+    const connection = getConnection()
+    if (connection === undefined) {
+        throw "connection is undefined"
+    }
+
+    const result = await connection<ActiveUserPresence[]>`
+        SELECT *
+        FROM activeUser
+        WHERE openFilePath = ${filePath}
+          AND rowPos = ${lineNumber}
           AND userId != ${excludeUserId}
     `
 

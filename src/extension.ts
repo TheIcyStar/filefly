@@ -7,6 +7,8 @@ import { updateActiveUserPresence } from './db/activeUserOperations'
 import postgres from 'postgres'
 import { fileCreateListener, fileDeleteListener, fileRenameListener, textDocumentChangeListener } from './listeners/fileListeners'
 import { registerEnterGuard } from './listeners/enterGuard'
+import { registerLineSelectionGuard } from './listeners/lineSelectionGuard'
+import { registerRemoteCursorDecorations } from './listeners/remoteCursorDecorations'
 import { getActiveConnectionName, getActiveConnectionProfile, hasSavedUserConfigForConnection, saveActiveConnectionProfile, setActiveConnectionName, UserConfig } from './utils/profileConnectionState'
 import { showUserConnectionPicker } from './utils/uiHelpers'
 import { markCurrentUserActive, markCurrentUserInactive } from './utils/userTracking'
@@ -855,6 +857,16 @@ export function activate(context: vscode.ExtensionContext): void {
     )
 
     registerEnterGuard(context, () => {
+        const connName = getActiveConnectionName(context)
+        return connName ? getStoredUserId(context, connName) : undefined
+    })
+
+    registerLineSelectionGuard(context, () => {
+        const connName = getActiveConnectionName(context)
+        return connName ? getStoredUserId(context, connName) : undefined
+    })
+
+    registerRemoteCursorDecorations(context, () => {
         const connName = getActiveConnectionName(context)
         return connName ? getStoredUserId(context, connName) : undefined
     })

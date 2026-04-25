@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import { deleteFile, insertDirectory, insertFile } from '../db/fileOperations'
+import { deleteFile, deleteStaleLines, insertDirectory, insertFile, upsertLines } from '../db/fileOperations'
 import { getConnection } from '../db/connectionManagement'
 import { getFileContents } from '../utils/fileTracking'
 import { isApplyingRemoteSync } from '../utils/syncGuard'
@@ -158,6 +158,8 @@ export async function fileRenameListener(fileRenameEvent: vscode.FileRenameEvent
 }
 
 const _textChangeTimers = new Map<string, ReturnType<typeof setTimeout>>()
+export const pendingLocalPushPaths = new Set<string>()
+export const lastKnownLines = new Map<string, string[]>()
 
 export function textDocumentChangeListener(event: vscode.TextDocumentChangeEvent): void {
     if (isApplyingRemoteSync()) {
@@ -172,24 +174,59 @@ export function textDocumentChangeListener(event: vscode.TextDocumentChangeEvent
 
     const uri = event.document.uri
     const key = uri.toString()
+    const relativePath = vscode.workspace.asRelativePath(uri, false).replaceAll('\\', '/')
+    if (!relativePath || relativePath === '.') {
+        return
+    }
 
     const existing = _textChangeTimers.get(key)
     if (existing) {
         clearTimeout(existing)
     }
 
+    // Mark this path as having a pending local push while debounce is active.
+    pendingLocalPushPaths.add(relativePath)
+
     _textChangeTimers.set(key, setTimeout(async () => {
         _textChangeTimers.delete(key)
         try {
-            const relativePath = vscode.workspace.asRelativePath(uri, false).replaceAll('\\', '/')
-            if (!relativePath || relativePath === '.') {
-                return
-            }
             const content = event.document.getText()
             const mtime = Date.now()
-            await insertFile(relativePath, mtime, content)
+            const newLines = content.split('\n')
+            const prevLines = lastKnownLines.get(relativePath)
+
+            if (prevLines === undefined) {
+                // First push for this file: full insert + seed line cache
+                await insertFile(relativePath, mtime, content)
+                await upsertLines(relativePath, newLines.map((c, i) => ({ number: i, content: c })))
+                await deleteStaleLines(relativePath, newLines.length)
+            } else {
+                const lineCountChanged = newLines.length !== prevLines.length
+                if (lineCountChanged) {
+                    // Structural edits (Enter/newline/delete line) are pushed as a full line snapshot.
+                    // This avoids line-number drift where concurrent inserts above remap indices.
+                    await upsertLines(relativePath, newLines.map((c, i) => ({ number: i, content: c })))
+                    await deleteStaleLines(relativePath, newLines.length)
+                } else {
+                    // Incremental content-only edit: push only touched lines.
+                    const changed: { number: number; content: string }[] = []
+                    for (let i = 0; i < newLines.length; i++) {
+                        if (prevLines[i] !== newLines[i]) {
+                            changed.push({ number: i, content: newLines[i] })
+                        }
+                    }
+                    await upsertLines(relativePath, changed)
+                }
+                await insertFile(relativePath, mtime, content)
+            }
+
+            lastKnownLines.set(relativePath, newLines)
         } catch (error) {
             console.error('[FileFly][textChange] failed to push:', error)
+        } finally {
+            if (!_textChangeTimers.has(key)) {
+                pendingLocalPushPaths.delete(relativePath)
+            }
         }
     }, 500))
 }

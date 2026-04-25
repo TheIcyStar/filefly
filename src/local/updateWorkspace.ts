@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import { getConnection } from '../db/connectionManagement'
 import { FSNode } from '../utils/filetreeDiff'
+import { lastKnownLines, pendingLocalPushPaths } from '../listeners/fileListeners'
 
 //Handles pulls from db and applies them to the workspace.
 
@@ -43,15 +44,21 @@ export async function updateWorkspaceFromDiff(nodes: FSNode[]): Promise<void> {
 
     const contentByPath = new Map<string, string>()
     for (const filePath of filePaths) {
-        const rows = await connection<{ content: string }[]>`
+        const lineRows = await connection<{ content: string }[]>`
             SELECT content
-            FROM file
+            FROM line
             WHERE path = ${filePath}
-            LIMIT 1
+            ORDER BY number ASC
         `
 
-        contentByPath.set(filePath, rows[0]?.content ?? '')
-        contentByPath.set(`./${filePath}`, rows[0]?.content ?? '')
+        const assembled = lineRows.length > 0
+            ? lineRows.map((r) => r.content).join('\n')
+            : (await connection<{ content: string }[]>`
+                SELECT content FROM file WHERE path = ${filePath} LIMIT 1
+              `)[0]?.content ?? ''
+
+        contentByPath.set(filePath, assembled)
+        contentByPath.set(`./${filePath}`, assembled)
     }
 
     const sortedPullNodes = [...pullNodes].sort((left, right) => left.workspacePath.length - right.workspacePath.length)
@@ -77,6 +84,11 @@ export async function updateWorkspaceFromDiff(nodes: FSNode[]): Promise<void> {
         const openDocument = vscode.workspace.textDocuments.find((document) => document.uri.toString() === targetUri.toString())
 
         if (openDocument) {
+            // Skip pulling only while a local debounce push is pending for this path.
+            // Once the local push flushes, pulls can apply even if the editor is still dirty.
+            if (pendingLocalPushPaths.has(relativePath)) {
+                continue
+            }
             if (openDocument.getText() !== fileContent) {
                 const fullDocumentRange = new vscode.Range(
                     openDocument.positionAt(0),
@@ -87,8 +99,10 @@ export async function updateWorkspaceFromDiff(nodes: FSNode[]): Promise<void> {
                 await vscode.workspace.applyEdit(edit)
                 await openDocument.save()
             }
+            lastKnownLines.set(relativePath, fileContent.split('\n'))
         } else {
             await vscode.workspace.fs.writeFile(targetUri, encoder.encode(fileContent))
+            lastKnownLines.set(relativePath, fileContent.split('\n'))
         }
 
         // Do not write pulled files back to DB here.

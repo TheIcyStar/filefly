@@ -38,16 +38,12 @@ CREATE TABLE IF NOT EXISTS activeUser (
     CONSTRAINT activeUser_openFilePath_to_file_path FOREIGN KEY (openFilePath) REFERENCES file(path)
 );
 
-CREATE TABLE IF NOT EXISTS chunk (
-    filePath      TEXT NOT NULL,
-    num           INT NOT NULL,
-    contents      TEXT NOT NULL,
-    startPosRow   INT NOT NULL,
-    startPosCol   INT NOT NULL,
-    stopPosRow    INT NOT NULL,
-    stopPosCol    INT NOT NULL,
-    PRIMARY KEY (filePath, num),
-    FOREIGN KEY (filePath) REFERENCES file(path) ON DELETE CASCADE
+CREATE TABLE IF NOT EXISTS line (
+    path     TEXT NOT NULL,
+    number   INT NOT NULL,
+    content  TEXT NOT NULL,
+    PRIMARY KEY (path, number),
+    FOREIGN KEY (path) REFERENCES file(path) ON DELETE CASCADE
 );
 
 INSERT INTO directory VALUES ('.', 0); --Root directory that will always get pushed to

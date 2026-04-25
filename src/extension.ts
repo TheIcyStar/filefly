@@ -97,6 +97,7 @@ async function realTimeSync(): Promise<void> {
     console.log('[FileFly][sync] initial rebuild done')
 
     console.log('[FileFly][sync] realtime sync active')
+    vscode.window.showInformationMessage('FileFly: Real-time sync is now active.')
     console.log('[FileFly][sync] any file events will be logged below')
 
     realTimeSyncInterval = setInterval(async () => {

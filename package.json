@@ -2,8 +2,8 @@
   "name": "filefly",
   "displayName": "filefly",
   "version": "0.0.1",
-  "engines": {
   "description": "Real time file editing", 
+  "engines": {
     "vscode": "^1.110.0"
   },
   "categories": [

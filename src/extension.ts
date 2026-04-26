@@ -10,9 +10,6 @@ import { showUserConnectionPicker } from './utils/uiHelpers'
 //note: largely doesn't work right now and is mostly just
 // UI - saving that workload for others.
 
-//FURTHER NOTE: I tested userConfig on a separate branch without the most recent
-// database connection changes and it worked - HOWEVER, it will not compile
-// on this version with said changes.
 export interface ConnectionConfig {
     connectionName: string
     authType: string
@@ -63,7 +60,6 @@ function getNonce(): string {
     return text
 }
 
-//since it's not just the connection anymore, I renamed this + a few other things
 function loadView(extensionUri: vscode.Uri, viewName: string, title: string): string {
     const viewDir = path.join(extensionUri.fsPath, 'dist', 'views', viewName)
     const html    = fs.readFileSync(path.join(viewDir, 'index.html'), 'utf8')

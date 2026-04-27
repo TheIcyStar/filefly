@@ -45,14 +45,43 @@ export async function getActiveUsersOnFile(filePath: string): Promise<ActiveUser
         throw "connection is undefined"
     }
 
-    const result = await connection<ActiveUserPresence[]>`
+    const result = await connection<any>`
         SELECT *
         FROM activeUser a
         WHERE a.openFilePath = ${filePath}
     `;
 
-    // Some postgres drivers return a wrapper, so force cast to plain array
-    return result as unknown as ActiveUserPresence[];
+    console.log('[ActiveUserOperations] Raw DB result:', result);
+
+    // Try to extract the array of user objects from the Result object
+    let users: any[] = [];
+    if (Array.isArray(result)) {
+        users = result;
+    } else if (result && typeof result === 'object') {
+        // Try common properties
+        if (Array.isArray(result.rows)) {
+            users = result.rows;
+        } else if (typeof result[0] === 'object') {
+            users = Object.values(result).filter(v => typeof v === 'object' && v !== null && !Array.isArray(v));
+        }
+    }
+
+    // Map fields to ActiveUserPresence (handles snake_case or camelCase)
+    const mapped = users.map(u => ({
+        userId: u.userId ?? u.userid ?? u.user_id,
+        displayName: u.displayName ?? u.displayname ?? u.display_name,
+        cursorColor: u.cursorColor ?? u.cursorcolor ?? u.cursor_color,
+        colPos: u.colPos ?? u.colpos ?? u.col_pos,
+        rowPos: u.rowPos ?? u.rowpos ?? u.row_pos,
+        openFilePath: u.openFilePath ?? u.openfilepath ?? u.open_file_path,
+        highlightStartRow: u.highlightStartRow ?? u.highlightstartrow ?? u.highlight_start_row,
+        highlightStartCol: u.highlightStartCol ?? u.highlightstartcol ?? u.highlight_start_col,
+        highlightStopRow: u.highlightStopRow ?? u.highlightstoprow ?? u.highlight_stop_row,
+        highlightStopCol: u.highlightStopCol ?? u.highlightstopcol ?? u.highlight_stop_col,
+    }));
+
+    console.log('[ActiveUserOperations] Mapped users:', mapped);
+    return mapped;
 }
 
 export async function removeActiveUser(userId: number) {

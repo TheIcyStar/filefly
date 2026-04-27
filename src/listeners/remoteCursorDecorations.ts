@@ -39,20 +39,16 @@ export function registerRemoteCursorDecorations(
             let deco = decorationTypes.get(user.userId)
             if (!deco) {
                 deco = vscode.window.createTextEditorDecorationType({
-                    border: `2px solid ${user.cursorColor}`,
-                    borderRadius: '2px',
-                    after: {
-                        contentText: '',
-                        margin: '0 0 0 2px',
-                    },
-                    isWholeLine: false,
+                    backgroundColor: user.cursorColor,
+                    isWholeLine: true,
                 })
                 decorationTypes.set(user.userId, deco)
             }
-            // Place a 0-width decoration at the user's cursor
-            const pos = new vscode.Position(user.rowPos!, user.colPos!)
+            // Highlight the entire line at the user's cursor
+            const line = user.rowPos!;
+            const lineRange = activeEditor.document.lineAt(line).range;
             activeEditor.setDecorations(deco, [{
-                range: new vscode.Range(pos, pos),
+                range: lineRange,
                 hoverMessage: `${user.displayName}`,
             }])
         }

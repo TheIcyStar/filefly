@@ -9,6 +9,7 @@ import { showUserConnectionPicker } from './utils/uiHelpers'
 //types 
 //note: largely doesn't work right now and is mostly just
 // UI - saving that workload for others.
+
 export interface ConnectionConfig {
     connectionName: string
     authType: string
@@ -21,13 +22,21 @@ export interface ConnectionConfig {
     serviceName: string
 }
 
-type ConnectionStatus = 'disconnected' | 'connected'
+interface UserConfig {
+    displayName: string
+    color: string
+}
+
+type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
 type DashboardMessage =
     | { command: 'submit'; payload: ConnectionConfig }
     | { command: 'cancel' }
     | { command: 'testConnection'; payload: ConnectionConfig }
 
+type UserConfigMessage =
+    | { command: 'submit'; payload: UserConfig }
+    | { command: 'cancel' }
 
 /*
     html section:
@@ -51,8 +60,8 @@ function getNonce(): string {
     return text
 }
 
-function getConnectionDashboardHtml(extensionUri: vscode.Uri, title = 'New FileFly Instance'): string {
-    const viewDir = path.join(extensionUri.fsPath, 'dist', 'views', 'connectionEdit')
+function loadView(extensionUri: vscode.Uri, viewName: string, title: string): string {
+    const viewDir = path.join(extensionUri.fsPath, 'dist', 'views', viewName)
     const html    = fs.readFileSync(path.join(viewDir, 'index.html'), 'utf8')
     const css     = fs.readFileSync(path.join(viewDir, 'style.css'),  'utf8')
     const js      = fs.readFileSync(path.join(viewDir, 'index.js'),   'utf8')
@@ -65,10 +74,124 @@ function getConnectionDashboardHtml(extensionUri: vscode.Uri, title = 'New FileF
         .replace('{{SCRIPT}}', js)
 }
 
+function getConnectionDashboardHtml(extensionUri: vscode.Uri, title = 'New FileFly Instance'): string {
+    return loadView(extensionUri, 'connectionEdit', title)
+}
+
+function getUserConfigHtml(extensionUri: vscode.Uri, title = 'Your Profile'): string {
+    return loadView(extensionUri, 'userConfig', title)
+}
+
+class UserConfigPanel {
+    public static readonly viewType = 'filefly.userConfig'
+
+    private readonly _panel: vscode.WebviewPanel
+    private readonly _disposables: vscode.Disposable[] = []
+
+    private constructor(
+        panel: vscode.WebviewPanel,
+        extensionUri: vscode.Uri,
+        private readonly _chainToConnection: boolean,
+        existingConfig: UserConfig | undefined
+    ) {
+        this._panel = panel
+        this._panel.webview.html = buildUserConfigHtml(extensionUri, existingConfig)
+        this._panel.onDidDispose(() => this.dispose(), null, this._disposables)
+        this._panel.webview.onDidReceiveMessage(
+            (msg: UserConfigMessage) => this._handleMessage(msg, extensionUri),
+            null,
+            this._disposables
+        )
+    }
+
+    public static createOrShow(
+        extensionUri: vscode.Uri,
+        _context: vscode.ExtensionContext,
+        // when called from editUserConfig, skip chaining to the connection panel
+        chainToConnection = true
+    ): void {
+        const column = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One
+        const existing: UserConfig | undefined =
+            vscode.workspace.getConfiguration('filefly').get('userConfig')
+
+        const title = chainToConnection ? 'Your Profile' : 'Edit Your Profile'
+
+        const panel = vscode.window.createWebviewPanel(
+            UserConfigPanel.viewType,
+            title,
+            column,
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true,
+                localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist', 'views')]
+            }
+        )
+
+        new UserConfigPanel(panel, extensionUri, chainToConnection, existing)
+    }
+
+    private _handleMessage(msg: UserConfigMessage, extensionUri: vscode.Uri): void {
+        switch (msg.command) {
+            case 'submit':
+                this._saveUserConfig(msg.payload, extensionUri)
+                break
+            case 'cancel':
+                this.dispose()
+                break
+        }
+    }
+
+    private _saveUserConfig(config: UserConfig, extensionUri: vscode.Uri): void {
+        vscode.workspace.getConfiguration('filefly')
+            .update('userConfig', config, vscode.ConfigurationTarget.Global)
+            .then(() => {
+                this.dispose()
+                if (this._chainToConnection) {
+                    ConnectionDashboardPanel.createOrShow(extensionUri)
+                } else {
+                    vscode.window.showInformationMessage('Profile updated.')
+                }
+            })
+    }
+
+    public dispose(): void {
+        this._panel.dispose()
+        while (this._disposables.length) {
+            this._disposables.pop()?.dispose()
+        }
+    }
+}
+
+/* 
+Builds the user config HTML, injecting a pre-population script when an
+existing config is provided so the form opens with the user's saved values.
+ */
+function buildUserConfigHtml(extensionUri: vscode.Uri, existing: UserConfig | undefined): string {
+    const baseHtml = getUserConfigHtml(extensionUri)
+
+    if (!existing) { return baseHtml }
+
+    const nonceMatch = baseHtml.match(/nonce="([^"]+)"/)
+    const nonce = nonceMatch ? nonceMatch[1] : ''
+
+    // Escape any </script> sequences inside the JSON to prevent early tag close
+    const safeJson = JSON.stringify(existing).replace(/<\/script>/gi, '<\\/script>')
+
+    const populateScript = `
+<script nonce="${nonce}">
+(function () {
+    var cfg = ${safeJson};
+    if (typeof populateConfig === 'function') { populateConfig(cfg); }
+}());
+</script>`
+
+    return baseHtml.replace('</body>', populateScript + '\n</body>')
+}
+
 /*
     placeholder/proof of concept - for now, 
     most of this sits until someone else implements
-    legit TCP probing or handshakes
+     legit TCP probing or handshakes
 */
 
 class ConnectionDashboardPanel {
@@ -156,6 +279,8 @@ class ConnectionDashboardPanel {
 function iconForStatus(status: ConnectionStatus): vscode.ThemeIcon {
     switch (status) {
         case 'connected': return new vscode.ThemeIcon('database', new vscode.ThemeColor('testing.iconPassed'))
+        case 'connecting': return new vscode.ThemeIcon('loading~spin')
+        case 'error': return new vscode.ThemeIcon('database', new vscode.ThemeColor('testing.iconFailed'))
         case 'disconnected': return new vscode.ThemeIcon('circle-outline', new vscode.ThemeColor('disabledForeground'))
     }
 }
@@ -303,7 +428,6 @@ function handleEditMessage(msg: DashboardMessage, originalName: string): void {
 Takes the base html and injects a script that populates the fields with the provided config values, then calls 
 and sets the correct visibility for the password field based on auth type 
  */
-
 function buildEditHtml(extensionUri: vscode.Uri, config: ConnectionConfig): string {
     const baseHtml = getConnectionDashboardHtml(extensionUri, `Edit Connection: ${config.connectionName}`)
     const nonceMatch = baseHtml.match(/nonce="([^"]+)"/)
@@ -348,7 +472,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
         vscode.commands.registerCommand(
             'filefly.newConnection',
-            () => ConnectionDashboardPanel.createOrShow(context.extensionUri)
+            () => UserConfigPanel.createOrShow(context.extensionUri, context, true)
+        ),
+
+        vscode.commands.registerCommand(
+            'filefly.editUserConfig',
+            () => UserConfigPanel.createOrShow(context.extensionUri, context, false)
         ),
 
         vscode.commands.registerCommand(

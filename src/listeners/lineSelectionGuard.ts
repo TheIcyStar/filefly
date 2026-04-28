@@ -56,7 +56,7 @@ export function registerLineSelectionGuard(
                     }
 
                     vscode.window.showWarningMessage(
-                        `FileFly: Line ${lineNumber + 1} is occupied by ${names}.`
+                        `FileFly: Line ${lineNumber + 1} is occupied by another user`
                     )
                     return
                 }

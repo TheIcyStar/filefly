@@ -77,8 +77,7 @@ export async function getActiveUsersOnFile(filePath: string): Promise<ActiveUser
         }
     }
 
-    // Map fields to ActiveUserPresence (handles snake_case or camelCase)
-    const mapped = users.map(u => ({
+   const mapped = users.map(u => ({
         userId: u.userId ?? u.userid ?? u.user_id,
         displayName: u.displayName ?? u.displayname ?? u.display_name,
         cursorColor: u.cursorColor ?? u.cursorcolor ?? u.cursor_color,

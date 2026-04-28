@@ -8,7 +8,7 @@ import postgres from 'postgres'
 import { fileCreateListener, fileDeleteListener, fileRenameListener, textDocumentChangeListener } from './listeners/fileListeners'
 import { registerEnterGuard } from './listeners/enterGuard'
 import { registerLineSelectionGuard } from './listeners/lineSelectionGuard'
-import { registerRemoteCursorDecorations } from './listeners/remoteCursorDecorations'
+import { updateDecorations } from './utils/userTracking'
 import { getActiveConnectionName, getActiveConnectionProfile, hasSavedUserConfigForConnection, saveActiveConnectionProfile, setActiveConnectionName, UserConfig } from './utils/profileConnectionState'
 import { showUserConnectionPicker, loadView, getConnectionDashboardHtml, getUserConfigHtml, UserConfigPanel, buildUserConfigHtml, ConnectionConfig, ConnectionItem, ConnectionDashboardPanel, EditConnectionPanel } from './utils/uiHelpers'
 import { markCurrentUserActive, markCurrentUserInactive } from './utils/userTracking'
@@ -82,7 +82,6 @@ async function realTimeSync(): Promise<void> {
             return
         }
 
-
         realTimeSyncRunning = true
 
         try {
@@ -96,6 +95,9 @@ async function realTimeSync(): Promise<void> {
                 await updateWorkspaceFromDiff(diffs)
             })
             //console.log('[FileFly][sync] tick apply done')
+            const connName = getActiveConnectionName(_extensionContext!)
+            const userId = connName ? getStoredUserId(_extensionContext!, connName) : undefined
+            await updateDecorations(userId)
         } catch (error) {
             console.error('FileFly real-time sync failed:', error)
         } finally {
@@ -353,20 +355,21 @@ export function activate(context: vscode.ExtensionContext): void {
 
     )
 
-    registerEnterGuard(context, () => {
-        const connName = getActiveConnectionName(context)
-        return connName ? getStoredUserId(context, connName) : undefined
-    })
+    // Guards and decorations will be registered after realTimeSync is started
+    // Only register guards/decorations once
+    if (!(realTimeSync as any)._guardsRegistered) {
+        registerEnterGuard(_extensionContext!, () => {
+            const connName = getActiveConnectionName(_extensionContext!)
+            return connName ? getStoredUserId(_extensionContext!, connName) : undefined
+        })
 
-    registerLineSelectionGuard(context, () => {
-        const connName = getActiveConnectionName(context)
-        return connName ? getStoredUserId(context, connName) : undefined
-    })
+        registerLineSelectionGuard(_extensionContext!, () => {
+            const connName = getActiveConnectionName(_extensionContext!)
+            return connName ? getStoredUserId(_extensionContext!, connName) : undefined
+        })
 
-    registerRemoteCursorDecorations(context, () => {
-        const connName = getActiveConnectionName(context)
-        return connName ? getStoredUserId(context, connName) : undefined
-    })
+        ;(realTimeSync as any)._guardsRegistered = true
+    }
 }
 
 

@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 
+
+// NOT RELEVANT ANYMORE, May choose to implment chunk system in future
 export class chunk {
     chunkId: number | null = null;
     contents: string = "";
@@ -32,7 +34,7 @@ export async function getFileContents(uri?: vscode.Uri): Promise<string | undefi
 
 
 
-
+//NOT USED
 export async function makeChunks(): Promise<chunk[] | undefined> {
     const content = await getFileContents()
 

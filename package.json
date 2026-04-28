@@ -24,23 +24,7 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "filefly",
-          "title": "FileFly"
-        }
-      ]
-    },
-    "views": {
-      "filefly": [
-        {
-          "id": "fileflyConnections",
-          "name": "Connections",
-          "contextualTitle": "FileFly Connections"
-        }
-      ]
-    },
+    
     "commands": [
       {
         "command": "filefly.helloWorld",

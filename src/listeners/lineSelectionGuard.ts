@@ -6,6 +6,7 @@ export function registerLineSelectionGuard(
     context: vscode.ExtensionContext,
     getUserId: () => number | undefined
 ): vscode.Disposable {
+    void context
     const lastValidSelectionsByEditor = new Map<string, vscode.Selection[]>()
     let isRestoringSelection = false
 
@@ -69,6 +70,5 @@ export function registerLineSelectionGuard(
         lastValidSelectionsByEditor.set(editorKey, [...event.selections])
     })
 
-    context.subscriptions.push(disposable)
     return disposable
 }

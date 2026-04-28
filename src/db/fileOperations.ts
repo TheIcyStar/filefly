@@ -1,5 +1,7 @@
 import { getConnection } from './connectionManagement'
 
+
+//Inserts Directory into Directory table
 export function insertDirectory(path: string, mtime: number) {
     const connection = getConnection()
     if (connection === undefined) {
@@ -14,6 +16,8 @@ export function insertDirectory(path: string, mtime: number) {
     `
 }
 
+
+//Inserts file into file table
 export function insertFile(path: string, mtime: number, content: string) {
     const connection = getConnection()
     if (connection === undefined) {
@@ -37,19 +41,7 @@ export function insertFile(path: string, mtime: number, content: string) {
     return query
 }
 
-export async function touchFileMtime(path: string, mtime: number): Promise<void> {
-    const connection = getConnection()
-    if (connection === undefined) {
-        throw "connection is undefined"
-    }
-
-    await connection`
-        UPDATE file
-        SET mtime = ${mtime}
-        WHERE path = ${path}
-    `
-}
-
+// Inserts line into line table
 export async function upsertLines(path: string, lines: { number: number; content: string }[]): Promise<void> {
     if (lines.length === 0) {
         return
@@ -66,6 +58,7 @@ export async function upsertLines(path: string, lines: { number: number; content
     `
 }
 
+// Removes stale lines(lines no longer used) from db
 export async function deleteStaleLines(path: string, lineCount: number): Promise<void> {
     const connection = getConnection()
     if (connection === undefined) {
@@ -77,45 +70,6 @@ export async function deleteStaleLines(path: string, lineCount: number): Promise
         WHERE path = ${path}
           AND number >= ${lineCount}
     `
-}
-
-export async function applyLineNumberShift(path: string, startLine: number, delta: number): Promise<void> {
-    if (delta === 0) {
-        return
-    }
-    if (delta < 0) {
-        throw new Error('applyLineNumberShift only supports positive deltas.')
-    }
-
-    const connection = getConnection()
-    if (connection === undefined) {
-        throw "connection is undefined"
-    }
-
-    const tempOffset = 1000000000
-
-    await connection.begin(async (tx) => {
-        // Move the affected rows out of the way first to avoid UNIQUE(path, number) collisions.
-        await tx.unsafe(
-            `
-                UPDATE line
-                SET number = number + $1
-                WHERE path = $2
-                  AND number >= $3
-            `,
-            [tempOffset, path, startLine]
-        )
-
-        await tx.unsafe(
-            `
-                UPDATE line
-                SET number = number - $1 + $2
-                WHERE path = $3
-                  AND number >= $4
-            `,
-            [tempOffset, delta, path, startLine + tempOffset]
-        )
-    })
 }
 
 export async function deleteFile(path: string): Promise<void> {

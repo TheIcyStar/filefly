@@ -5,8 +5,9 @@ import { getConnection } from '../db/connectionManagement'
 // Intercepts the Enter key. If another active user has their cursor below the current user's
 // cursor line in the same file, the newline is blocked and a warning is shown. This prevents
 // the line-number drift problem where one user's Enter shifts another user's line numbers.
-export function registerEnterGuard(context: vscode.ExtensionContext, getUserId: () => number | undefined): void {
+export function registerEnterGuard(context: vscode.ExtensionContext, getUserId: () => number | undefined): vscode.Disposable {
     console.log('[FileFly][enterGuard] registering type command override')
+    void context
 
     const disposable = vscode.commands.registerCommand('type', async (args: { text: string }) => {
         // Only intercept Enter keystrokes; pass everything else straight through.
@@ -15,32 +16,32 @@ export function registerEnterGuard(context: vscode.ExtensionContext, getUserId: 
             return
         }
 
-        console.log('[FileFly][enterGuard] Enter pressed — checking guard conditions')
+        //console.log('[FileFly][enterGuard] Enter pressed — checking guard conditions')
 
         // If no DB connection is active, let the editor behave normally.
         if (!getConnection()) {
-            console.log('[FileFly][enterGuard] no DB connection — allowing Enter')
+            //console.log('[FileFly][enterGuard] no DB connection — allowing Enter')
             await vscode.commands.executeCommand('default:type', args)
             return
         }
 
         const editor = vscode.window.activeTextEditor
         if (!editor) {
-            console.log('[FileFly][enterGuard] no active editor — allowing Enter')
+            //console.log('[FileFly][enterGuard] no active editor — allowing Enter')
             await vscode.commands.executeCommand('default:type', args)
             return
         }
 
         const userId = getUserId()
         if (userId === undefined) {
-            console.log('[FileFly][enterGuard] no userId — allowing Enter')
+            //console.log('[FileFly][enterGuard] no userId — allowing Enter')
             await vscode.commands.executeCommand('default:type', args)
             return
         }
 
         const filePath = vscode.workspace.asRelativePath(editor.document.uri, false).replaceAll('\\', '/')
         if (!filePath || filePath === '.') {
-            console.log('[FileFly][enterGuard] could not resolve filePath — allowing Enter')
+            //console.log('[FileFly][enterGuard] could not resolve filePath — allowing Enter')
             await vscode.commands.executeCommand('default:type', args)
             return
         }
@@ -48,29 +49,29 @@ export function registerEnterGuard(context: vscode.ExtensionContext, getUserId: 
         // Use the lowest cursor position if there are multiple selections.
         const lowestCursorLine = Math.max(...editor.selections.map((s) => s.active.line))
 
-        console.log(`[FileFly][enterGuard] userId=${userId} filePath=${filePath} lowestCursorLine=${lowestCursorLine} — querying users below`)
+        //console.log(`[FileFly][enterGuard] userId=${userId} filePath=${filePath} lowestCursorLine=${lowestCursorLine} — querying users below`)
 
         try {
             const usersBelow = await getActiveUsersBelowLine(filePath, lowestCursorLine, userId)
-            console.log(`[FileFly][enterGuard] usersBelow count=${usersBelow.length}`, usersBelow.map(u => `${u.displayName}@row${u.rowPos}`))
+            //console.log(`[FileFly][enterGuard] usersBelow count=${usersBelow.length}`, usersBelow.map(u => `${u.displayName}@row${u.rowPos}`))
 
             if (usersBelow.length > 0) {
                 const names = usersBelow.map((u) => u.displayName).join(', ')
-                console.log(`[FileFly][enterGuard] BLOCKING Enter — users below: ${names}`)
+                console.log(`[FileFly][enterGuard] BLOCKING Enter - There are users editing below you`)
                 vscode.window.showWarningMessage(
-                    `FileFly: Cannot create a new line — ${names} ${usersBelow.length === 1 ? 'is' : 'are'} editing below your cursor.`
+                    `FileFly: Cannot create a new line — there are users editing below your cursor.`
                 )
                 // Do NOT forward the keystroke — newline is blocked.
                 return
             }
         } catch (err) {
-            console.error('[FileFly][enterGuard] failed to check users below cursor:', err)
+            //console.error('[FileFly][enterGuard] failed to check users below cursor:', err)
             // On error, fall through and allow the newline so editing is not permanently broken.
         }
 
-        console.log('[FileFly][enterGuard] no users below — allowing Enter')
+        //console.log('[FileFly][enterGuard] no users below — allowing Enter')
         await vscode.commands.executeCommand('default:type', args)
     })
 
-    context.subscriptions.push(disposable)
+    return disposable
 }

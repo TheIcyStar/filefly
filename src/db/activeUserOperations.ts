@@ -1,5 +1,7 @@
 import { getConnection } from './connectionManagement'
 
+// Contains all modifying operations relating to the active User table
+
 export interface ActiveUserPresence {
     userId: number
     displayName: string
@@ -13,11 +15,19 @@ export interface ActiveUserPresence {
     highlightStopCol: number | null
 }
 
-export function updateActiveUserPresence(presence: ActiveUserPresence) {
+// Inserts data from presence object into Active User table
+export async function updateActiveUserPresence(presence: ActiveUserPresence) {
     const connection = getConnection();
     if (connection === undefined) {
         throw "connection is undefined"
     }
+
+    let openPath = presence.openFilePath
+    if (openPath) {
+        const rows = await connection`SELECT 1 FROM file WHERE path = ${openPath}`
+        if (!rows || rows.length === 0) openPath = null
+    }
+
 
     return connection`
         INSERT INTO activeUser
@@ -39,6 +49,7 @@ export function updateActiveUserPresence(presence: ActiveUserPresence) {
 }
 
 
+//Returns array of active users who have the passed file open
 export async function getActiveUsersOnFile(filePath: string): Promise<ActiveUserPresence[]> {
     const connection = getConnection();
     if (connection === undefined) {
@@ -84,6 +95,8 @@ export async function getActiveUsersOnFile(filePath: string): Promise<ActiveUser
     return mapped;
 }
 
+
+// Remove active user from table (in case of disconnect)
 export async function removeActiveUser(userId: number) {
     const connection = getConnection();
     if (connection === undefined) {
@@ -96,6 +109,8 @@ export async function removeActiveUser(userId: number) {
     `;
 }
 
+//Returns array of active users below passed line number.
+//Used for enterGuard - RealtimeSync
 export async function getActiveUsersBelowLine(filePath: string, lineNumber: number, excludeUserId: number): Promise<ActiveUserPresence[]> {
     const connection = getConnection()
     if (connection === undefined) {
@@ -113,6 +128,8 @@ export async function getActiveUsersBelowLine(filePath: string, lineNumber: numb
     return result
 }
 
+//Returns array of activeUser on a given line number
+//Used for lineSelectionGuard - RealtimeSync
 export async function getActiveUsersOnLine(filePath: string, lineNumber: number, excludeUserId: number): Promise<ActiveUserPresence[]> {
     const connection = getConnection()
     if (connection === undefined) {
@@ -130,6 +147,8 @@ export async function getActiveUsersOnLine(filePath: string, lineNumber: number,
     return result
 }
 
+
+//Returns all active users
 export async function getAllActiveUsers() {
     const connection = getConnection();
     if (connection === undefined) {

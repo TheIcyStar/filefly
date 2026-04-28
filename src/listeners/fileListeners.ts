@@ -18,7 +18,7 @@ export async function fileCreateListener(fileCreateEvent: vscode.FileCreateEvent
 
     const connection = getConnection()
     if (!connection) {
-        console.warn('[FileFly][create] skipped: no DB connection')
+        //console.warn('[FileFly][create] skipped: no DB connection')
         vscode.window.showWarningMessage('FileFly: Ignoring create event because no database connection is active.')
         return
     }
@@ -86,7 +86,7 @@ export async function fileDeleteListener(fileDeleteEvent: vscode.FileDeleteEvent
 
         try {
             await deleteFile(relativePath)
-
+            console.error(`Successfully deleted file: "${relativePath}" from database`)
             vscode.window.showInformationMessage(`FileFly: Removed "${relativePath}" from database.`)
         } catch (error) {
             vscode.window.showErrorMessage(`FileFly: Failed to delete "${relativePath}" from database.`)

@@ -2,6 +2,7 @@ import * as vscode from 'vscode'
 import { getActiveUsersOnFile } from '../db/activeUserOperations'
 import { getConnection } from '../db/connectionManagement'
 
+//OLD From when rendering cursors, kept if we want to change it back
 interface RemoteCursorDecoration {
     userId: number
     displayName: string
@@ -9,10 +10,13 @@ interface RemoteCursorDecoration {
     position: vscode.Position
 }
 
+
+// Changes whole line to color of user editing that line
 export function registerRemoteCursorDecorations(
     context: vscode.ExtensionContext,
     getUserId: () => number | undefined
 ): vscode.Disposable {
+    void context
     let activeEditor = vscode.window.activeTextEditor
     let pollInterval: NodeJS.Timeout | undefined
     const decorationTypes = new Map<number, vscode.TextEditorDecorationType>()
@@ -64,14 +68,14 @@ export function registerRemoteCursorDecorations(
         pollInterval = undefined
     }
 
-    vscode.window.onDidChangeActiveTextEditor(editor => {
+    const onDidChangeActiveTextEditorDisp = vscode.window.onDidChangeActiveTextEditor(editor => {
         activeEditor = editor
         updateDecorations()
-    }, null, context.subscriptions)
+    })
 
-    vscode.workspace.onDidCloseTextDocument(() => {
+    const onDidCloseTextDocumentDisp = vscode.workspace.onDidCloseTextDocument(() => {
         stopPolling()
-    }, null, context.subscriptions)
+    })
 
     startPolling()
     updateDecorations()
@@ -80,7 +84,8 @@ export function registerRemoteCursorDecorations(
         stopPolling()
         for (const deco of decorationTypes.values()) deco.dispose()
         decorationTypes.clear()
+        try { onDidChangeActiveTextEditorDisp.dispose() } catch (e) {}
+        try { onDidCloseTextDocumentDisp.dispose() } catch (e) {}
     }}
-    context.subscriptions.push(disposable)
     return disposable as vscode.Disposable
 }

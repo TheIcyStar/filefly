@@ -20,7 +20,7 @@ const lastLineByUser = new Map<number, number | undefined>()
 export async function updateDecorations(userId: number | undefined) {
     try {
         const activeEditorNow = vscode.window.activeTextEditor
-        console.log('[RemoteCursor] tick', new Date().toISOString())
+        //console.log('[RemoteCursor] tick', new Date().toISOString())
         if (!activeEditorNow || !getConnection()) {
             console.log('[RemoteCursor] no active editor or no DB connection')
             return
@@ -32,7 +32,7 @@ export async function updateDecorations(userId: number | undefined) {
         let users = await getActiveUsersOnFile(filePath)
         users = users.filter(u => u.userId !== userId && u.rowPos !== null && u.colPos !== null)
 
-        console.log('[RemoteCursor] updateDecorations users:', users.map(u => ({ userId: u.userId, displayName: u.displayName, rowPos: u.rowPos, colPos: u.colPos, cursorColor: u.cursorColor })))
+        //console.log('[RemoteCursor] updateDecorations users:', users.map(u => ({ userId: u.userId, displayName: u.displayName, rowPos: u.rowPos, colPos: u.colPos, cursorColor: u.cursorColor })))
 
         // Remove decorations for users no longer present
         for (const [uid, deco] of decorationTypes.entries()) {

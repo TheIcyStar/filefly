@@ -50,7 +50,7 @@ export async function updateActiveUserPresence(presence: ActiveUserPresence) {
 
 
 function mapActiveUserResult(result: any): ActiveUserPresence[] {
-    console.log('[ActiveUserOperations] Raw DB result:', result);
+    //console.log('[ActiveUserOperations] Raw DB result:', result);
 
     let users: any[] = [];
     if (Array.isArray(result)) {
@@ -76,7 +76,7 @@ function mapActiveUserResult(result: any): ActiveUserPresence[] {
         highlightStopCol: u.highlightStopCol ?? u.highlightstopcol ?? u.highlight_stop_col,
     }));
 
-    console.log('[ActiveUserOperations] Mapped users:', mapped);
+    //console.log('[ActiveUserOperations] Mapped users:', mapped);
     return mapped;
 }
 

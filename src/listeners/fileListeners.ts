@@ -3,6 +3,7 @@ import { deleteFile, deleteStaleLines, insertDirectory, insertFile, upsertLines 
 import { getConnection } from '../db/connectionManagement'
 import { getFileContents } from '../utils/fileTracking'
 import { isApplyingRemoteSync } from '../utils/syncGuard'
+import { getActiveUsersOnFile } from '../db/activeUserOperations'
 
 //These listeners act as the primary pushers to the db, it pushes local changes detected to db. Pulls are handled by updateWorkspace.ts.
 //This takes care of file creation, deletion, and renaming events, and updates the database accordingly. It also listens for text document changes to push content updates to the database. All listeners are guarded by the "isApplyingRemoteSync" function to prevent write/read loops to db.
@@ -72,6 +73,7 @@ export async function fileDeleteListener(fileDeleteEvent: vscode.FileDeleteEvent
         return
     }
 
+
     const connection = getConnection()
     if (!connection) {
         vscode.window.showWarningMessage('FileFly: Ignoring delete event because no database connection is active.')
@@ -85,11 +87,16 @@ export async function fileDeleteListener(fileDeleteEvent: vscode.FileDeleteEvent
         }
 
         try {
+            
+            if ((await getActiveUsersOnFile(relativePath)).length > 0 ){
+                throw new Error("There are users still editing this file.")
+            }
+
             await deleteFile(relativePath)
             console.error(`Successfully deleted file: "${relativePath}" from database`)
             vscode.window.showInformationMessage(`FileFly: Removed "${relativePath}" from database.`)
         } catch (error) {
-            vscode.window.showErrorMessage(`FileFly: Failed to delete "${relativePath}" from database.`)
+            vscode.window.showErrorMessage(`FileFly: Failed to delete "${relativePath}" from database. Another user may be editing this file.`)
             console.error(`Failed deleting path ${relativePath} from database:`, error)
         }
     }

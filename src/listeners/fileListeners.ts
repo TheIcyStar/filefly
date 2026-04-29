@@ -3,7 +3,7 @@ import { deleteFile, deleteStaleLines, insertDirectory, insertFile, upsertLines 
 import { getConnection } from '../db/connectionManagement'
 import { getFileContents } from '../utils/fileTracking'
 import { isApplyingRemoteSync } from '../utils/syncGuard'
-import { getActiveUsersOnFile } from '../db/activeUserOperations'
+import { getActiveUsersOnPath } from '../db/activeUserOperations'
 
 //These listeners act as the primary pushers to the db, it pushes local changes detected to db. Pulls are handled by updateWorkspace.ts.
 //This takes care of file creation, deletion, and renaming events, and updates the database accordingly. It also listens for text document changes to push content updates to the database. All listeners are guarded by the "isApplyingRemoteSync" function to prevent write/read loops to db.
@@ -81,14 +81,13 @@ export async function fileDeleteListener(fileDeleteEvent: vscode.FileDeleteEvent
     }
 
     for (const uri of fileDeleteEvent.files) {
-        const relativePath = vscode.workspace.asRelativePath(uri, false)
+        const relativePath = vscode.workspace.asRelativePath(uri, false).replaceAll('\\', '/')
         if (!relativePath || relativePath === '.') {
             continue
         }
 
         try {
-            
-            if ((await getActiveUsersOnFile(relativePath)).length > 0 ){
+            if ((await getActiveUsersOnPath(relativePath)).length > 0 ){
                 throw new Error("There are users still editing this file.")
             }
 
@@ -108,8 +107,8 @@ export async function fileRenameListener(fileRenameEvent: vscode.FileRenameEvent
     }
 
     for (const rename of fileRenameEvent.files) {
-        const oldRelativePath = vscode.workspace.asRelativePath(rename.oldUri, false)
-        const newRelativePath = vscode.workspace.asRelativePath(rename.newUri, false)
+        const oldRelativePath = vscode.workspace.asRelativePath(rename.oldUri, false).replaceAll('\\', '/')
+        const newRelativePath = vscode.workspace.asRelativePath(rename.newUri, false).replaceAll('\\', '/')
 
         if (!oldRelativePath || oldRelativePath === '.' || !newRelativePath || newRelativePath === '.') {
             continue

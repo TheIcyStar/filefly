@@ -49,27 +49,13 @@ export async function updateActiveUserPresence(presence: ActiveUserPresence) {
 }
 
 
-//Returns array of active users who have the passed file open
-export async function getActiveUsersOnFile(filePath: string): Promise<ActiveUserPresence[]> {
-    const connection = getConnection();
-    if (connection === undefined) {
-        throw "connection is undefined"
-    }
-
-    const result = await connection<any>`
-        SELECT *
-        FROM activeUser a
-        WHERE a.openFilePath = ${filePath}
-    `;
-
+function mapActiveUserResult(result: any): ActiveUserPresence[] {
     console.log('[ActiveUserOperations] Raw DB result:', result);
 
-    // Try to extract the array of user objects from the Result object
     let users: any[] = [];
     if (Array.isArray(result)) {
         users = result;
     } else if (result && typeof result === 'object') {
-        // Try common properties
         if (Array.isArray(result.rows)) {
             users = result.rows;
         } else if (typeof result[0] === 'object') {
@@ -92,6 +78,41 @@ export async function getActiveUsersOnFile(filePath: string): Promise<ActiveUser
 
     console.log('[ActiveUserOperations] Mapped users:', mapped);
     return mapped;
+}
+
+//For decorations
+export async function getActiveUsersOnFile(filePath: string): Promise<ActiveUserPresence[]> {
+    const connection = getConnection();
+    if (connection === undefined) {
+        throw "connection is undefined"
+    }
+
+    const result = await connection<any>`
+        SELECT *
+        FROM activeUser a
+        WHERE a.openFilePath = ${filePath}
+    `;
+
+    return mapActiveUserResult(result);
+}
+
+//For deletes
+export async function getActiveUsersOnPath(filePath: string): Promise<ActiveUserPresence[]> {
+    const connection = getConnection();
+    if (connection === undefined) {
+        throw "connection is undefined"
+    }
+
+    const likePrefix = `${filePath.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_')}/%`
+
+    const result = await connection<any>`
+        SELECT *
+        FROM activeUser a
+        WHERE a.openFilePath = ${filePath}
+           OR a.openFilePath LIKE ${likePrefix} ESCAPE '\\'
+    `;
+
+    return mapActiveUserResult(result);
 }
 
 

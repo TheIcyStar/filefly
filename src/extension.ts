@@ -107,6 +107,23 @@ async function realTimeSync(): Promise<void> {
     }, realTimeSyncIntervalMs)
 }
 
+// needs testing
+
+function stopRealtimeSync(reason?: string): void {
+    if (!realTimeSyncInterval) {
+        return
+    }
+
+    clearInterval(realTimeSyncInterval)
+    realTimeSyncInterval = undefined
+    realTimeSyncRunning = false
+
+    if (reason) {
+        console.log(`[FileFly] realtime sync stopped: ${reason}`)
+        vscode.window.showInformationMessage(`FileFly: Real-time sync disabled. ${reason}`)
+    }
+}
+
 
 export function activate(context: vscode.ExtensionContext): void {
     _extensionContext = context
@@ -325,6 +342,46 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.workspace.onDidRenameFiles(fileRenameListener),
 
         vscode.workspace.onDidChangeTextDocument(textDocumentChangeListener),
+
+        //needs testing
+
+        vscode.workspace.onDidChangeWorkspaceFolders(async (event) => {
+            if (event.added.length === 0 && event.removed.length === 0) {
+                return
+            }
+            if (!realTimeSyncInterval) {
+                return
+            }
+
+            try {
+                await markCurrentUserInactive(context)
+            } catch (err) {
+                console.error('Failed to mark current user inactive during workspace root switch:', err)
+            }
+
+            stopRealtimeSync('Workspace root changed')
+        }),
+
+        vscode.workspace.onDidCloseTextDocument(async () => {
+            if (!getConnection()) {
+                return
+            }
+            if (vscode.window.visibleTextEditors.length > 0) {
+                return
+            }
+
+            const connName = getActiveConnectionName(context)
+            const userId = connName ? getStoredUserId(context, connName) : undefined
+            if (userId === undefined) {
+                return
+            }
+
+            try {
+                await markCurrentUserInactive(context)
+            } catch (err) {
+                console.error('Failed to mark current user inactive after closing all editors:', err)
+            }
+        }),
 
         vscode.window.onDidChangeTextEditorSelection(async (event) => {
             const connName = getActiveConnectionName(context)

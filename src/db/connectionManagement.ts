@@ -1,5 +1,5 @@
 import postgres from 'postgres'
-import { ConnectionConfig } from '../extension'
+import { ConnectionConfig } from '../utils/uiHelpers';
 
 let conn: postgres.Sql | undefined;
 

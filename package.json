@@ -2,16 +2,19 @@
   "name": "filefly",
   "displayName": "filefly",
   "version": "0.0.1",
-  "description": "Real time file editing", 
+  "description": "Real time file editing",
   "engines": {
+  "description": "Real time file editing",
     "vscode": "^1.110.0"
   },
   "categories": [
     "Other"
   ],
   "activationEvents": [
+    "onCommand:filefly.resetState",
     "onCommand:filefly.newConnection",
     "onCommand:filefly.editUserConfig",
+    "onCommand:filefly.startRealtimeSync",
     "onCommand:filefly.refreshConnections",
     "onCommand:filefly.connectConnection",
     "onCommand:filefly.disconnectConnection",
@@ -21,23 +24,7 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "filefly",
-          "title": "FileFly"
-        }
-      ]
-    },
-    "views": {
-      "filefly": [
-        {
-          "id": "fileflyConnections",
-          "name": "Connections",
-          "contextualTitle": "FileFly Connections"
-        }
-      ]
-    },
+    
     "commands": [
       {
         "command": "filefly.helloWorld",
@@ -50,6 +37,12 @@
         "icon": "$(plug)"
       },
       {
+        "command": "filefly.resetState",
+        "title": "Reset Extension State",
+        "category": "FileFly",
+        "icon": "$(trash)"
+      },
+      {
         "command": "filefly.editUserConfig",
         "title": "Edit Your Profile",
         "category": "FileFly",
@@ -60,6 +53,12 @@
         "title": "Refresh Connections",
         "category": "FileFly",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "filefly.startRealtimeSync",
+        "title": "Start Real-Time Sync",
+        "category": "FileFly",
+        "icon": "$(cloud-download)"
       },
       {
         "command": "filefly.connectConnection",
@@ -97,6 +96,11 @@
           "command": "filefly.refreshConnections",
           "when": "view == fileflyConnections",
           "group": "navigation@2"
+        },
+        {
+          "command": "filefly.startRealtimeSync",
+          "when": "view == fileflyConnections",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
@@ -125,15 +129,6 @@
     "configuration": {
       "title": "FileFly",
       "properties": {
-        "filefly.userConfig": {
-          "type": "object",
-          "description": "Your collaborator profile.",
-          "properties": {
-            "displayName": { "type": "string" },
-            "bio":         { "type": "string" },
-            "color":       { "type": "string" }
-          }
-        },
         "filefly.connections": {
           "type": "array",
           "default": [],
@@ -149,6 +144,12 @@
             ],
             "properties": {
               "connectionName": {
+                "type": "string"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "color": {
                 "type": "string"
               },
               "authType": {
@@ -192,10 +193,10 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
+    "npm-run-all": "^4.1.5",
     "@types/node": "22.x",
     "@types/vscode": "^1.110.0",
     "esbuild": "^0.27.3",
-    "npm-run-all": "^4.1.5",
     "typescript": "^5.9.3"
   },
   "dependencies": {

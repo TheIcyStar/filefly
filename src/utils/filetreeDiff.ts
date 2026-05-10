@@ -24,6 +24,7 @@ type DirectoryNode = {
 type FSNodeDBSchema = {
     path: string,
     mtime: number
+    type: 'file' | 'directory'
 }
 
 /*
@@ -137,9 +138,9 @@ export async function getWorkspaceTreeDiff(): Promise<FSNode[]> {
     }
 
     const remoteFilePromise = db<FSNodeDBSchema[]>`
-        SELECT path, mtime FROM file
+        SELECT path, mtime, 'file' AS type FROM file
         UNION ALL
-        SELECT path, mtime from directory
+        SELECT path, mtime, 'directory' AS type from directory
     `
 
     //COALESCE(file.path, directory.path) AS path,
@@ -155,7 +156,12 @@ export async function getWorkspaceTreeDiff(): Promise<FSNode[]> {
     }
 
     for(const dbFile of dbFiles){
-        const localNode = nodeMap.get(dbFile.path)
+
+        //To prevent infinite loops with paths that are only different by "./" at the start, we check the map with both the raw DB path and a normalized version with "./" at the start
+        const normalizedDbPath = dbFile.path.startsWith('./') || dbFile.path === '.'
+            ? dbFile.path
+            : `./${dbFile.path}`
+        const localNode = nodeMap.get(dbFile.path) ?? nodeMap.get(normalizedDbPath)
 
         if(localNode){ //Local and remote file exists
             if(localNode.mtime! == dbFile.mtime){
@@ -173,33 +179,70 @@ export async function getWorkspaceTreeDiff(): Promise<FSNode[]> {
             //     nodeMap.delete(dbFile.path)
             // }
             unknownNodes.delete(dbFile.path)
+            unknownNodes.delete(normalizedDbPath)
 
         } else { //local file does not exist, remote file does
             //Go up directories until we find one that exists
-            let nextParentPath = dbFile.path.substring(0, dbFile.path.lastIndexOf("/"))
+
+            let nextParentPath = dbFile.path.includes('/')
+                ? dbFile.path.substring(0, dbFile.path.lastIndexOf('/'))
+                : '.'
             while(!nodeMap.has(nextParentPath)){
                 if(nextParentPath === "."){
                     console.error(`getWorkspaceTreeDiff(): Failed to find any matching parent directories for ${dbFile.path} locally`)
                     break //shouldn't hit this because root exists, but I don't like this potential infinite while if something goes wrong
                 }
-                nextParentPath = nextParentPath.substring(0, nextParentPath.lastIndexOf("/"))
+                nextParentPath = nextParentPath.includes('/')
+                    ? nextParentPath.substring(0, nextParentPath.lastIndexOf('/'))
+                    : '.'
             }
 
             const localParent: DirectoryNode = nodeMap.get(nextParentPath) as DirectoryNode
-            const remoteParentMtime: number = dbFilesMap.get(nextParentPath)!
+            const remoteParentMtime: number | undefined = dbFilesMap.get(nextParentPath)
 
-            if(localParent.mtime! > remoteParentMtime){
+            if(nextParentPath === '.'){
+                // Root mtime is not persisted in DB, so for missing local nodes prefer pulling from remote.
+                const newNode = dbFile.type === 'directory'
+                    ? {
+                        workspacePath: dbFile.path,
+                        uri: vscode.Uri.joinPath(rootNode.uri, dbFile.path),
+                        parent: localParent,
+                        status: "NEED_PULL",
+                        type: FileType.Directory,
+                        children: [],
+                    } as DirectoryNode
+                    : {
+                        workspacePath: dbFile.path,
+                        uri: vscode.Uri.joinPath(rootNode.uri, dbFile.path),
+                        parent: localParent,
+                        status: "NEED_PULL",
+                        type: FileType.File
+                    } as FileNode
+                localParent.children.push(newNode)
+                nodeMap.set(dbFile.path, newNode)
+                fileDiffs.push(newNode)
+            } else if(localParent.mtime! > (remoteParentMtime ?? 0)){
                 localParent.status = "NEED_DELETE_REMOTE"
                 fileDiffs.push(localParent)
 
-            } else if(localParent.mtime! < remoteParentMtime){
-                const newNode = {
-                    workspacePath: dbFile.path,
-                    uri: vscode.Uri.joinPath(rootNode.uri, dbFile.path),
-                    parent: localParent,
-                    status: "NEED_PULL",
-                    type: FileType.File
-                } as FileNode
+            } else if(localParent.mtime! < (remoteParentMtime ?? 0)){
+                //Establish difference between dir and file
+                const newNode = dbFile.type === 'directory'
+                    ? {
+                        workspacePath: dbFile.path,
+                        uri: vscode.Uri.joinPath(rootNode.uri, dbFile.path),
+                        parent: localParent,
+                        status: "NEED_PULL",
+                        type: FileType.Directory,
+                        children: [],
+                    } as DirectoryNode
+                    : {
+                        workspacePath: dbFile.path,
+                        uri: vscode.Uri.joinPath(rootNode.uri, dbFile.path),
+                        parent: localParent,
+                        status: "NEED_PULL",
+                        type: FileType.File
+                    } as FileNode
                 localParent.children.push(newNode)
                 nodeMap.set(dbFile.path, newNode)
                 fileDiffs.push(newNode)
@@ -248,5 +291,5 @@ export async function getWorkspaceTreeDiff(): Promise<FSNode[]> {
         }
     }
 
-    return fileDiffs
+    return [...new Set(fileDiffs)]
 }
